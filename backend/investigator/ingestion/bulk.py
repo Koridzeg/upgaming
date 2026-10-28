@@ -33,6 +33,7 @@ from investigator.ingestion.models import LoadedDocument
 from investigator.ingestion.store import embed_chunks, insert_chunks
 from investigator.ingestion.tokenizer import Tokenizer, get_tokenizer
 from investigator.migrate import apply_migrations
+from investigator.retrieval.keyword import refresh_term_stats
 from investigator.text import content_hash
 
 logger = logging.getLogger(__name__)
@@ -130,6 +131,8 @@ async def bulk_load(
     finally:
         await _rebuild_indexes(conn, index_definitions, progress)
 
+    for strategy in strategies:  # BM25 document frequencies now include the new chunks
+        await refresh_term_stats(conn, strategy)
     return {"loaded": len(new), "duplicates": aliases, "chunks": chunk_total}
 
 

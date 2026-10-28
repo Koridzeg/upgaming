@@ -72,6 +72,18 @@ The bulk loader skips documents that are already stored, so it can be re-run aft
 interruption. The database records which model produced its vectors and refuses vectors from
 any other model.
 
+## Searching
+
+Hybrid search: dense (pgvector HNSW) and BM25 keyword candidates, fused with weighted
+Reciprocal Rank Fusion, then re-ranked (title naming + MMR diversity). Each result shows why it
+ranked where it did.
+
+```bash
+python -m investigator.retrieval "Were Scott Derrickson and Ed Wood of the same nationality?"
+python -m investigator.retrieval "pool size during INC-2026-0311" --mode keyword --k 5
+python -m investigator.retrieval --refresh-stats   # recompute BM25 term statistics
+```
+
 ## Ingesting files
 
 ```bash

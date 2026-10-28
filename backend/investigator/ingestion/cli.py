@@ -18,6 +18,7 @@ from investigator.ingestion.models import DocumentError
 from investigator.ingestion.store import ingest_document
 from investigator.ingestion.tokenizer import get_tokenizer
 from investigator.migrate import apply_migrations
+from investigator.retrieval.keyword import refresh_term_stats
 
 
 async def ingest_files(paths: list[Path], strategies: list[str]) -> None:
@@ -49,6 +50,8 @@ async def ingest_files(paths: list[Path], strategies: list[str]) -> None:
             if result.near_duplicates:
                 detail += f", near-duplicate of {result.near_duplicates}"
             print(f"{result.status:<10} {path.name}  ({detail})")
+        for strategy in strategies:  # keep BM25 document frequencies current
+            await refresh_term_stats(conn, strategy)
     finally:
         await conn.close()
 
