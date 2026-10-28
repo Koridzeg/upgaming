@@ -17,7 +17,7 @@ from starlette.exceptions import HTTPException  # what StaticFiles raises (FastA
 from investigator.api import documents, investigate, system
 from investigator.api.services import Services, build_services
 from investigator.config import Settings, get_settings
-from investigator.db import create_pool
+from investigator.db import create_pool, database_url
 from investigator.migrate import apply_migrations
 
 ServicesFactory = Callable[[Settings, asyncpg.Pool], Awaitable[Services]]
@@ -43,14 +43,15 @@ def create_app(services_factory: ServicesFactory = build_services) -> FastAPI:
     async def lifespan(app: FastAPI):
         """Startup: schema up to date, pool open, models loaded. Shutdown: close them."""
         logging.basicConfig(level=settings.log_level, format="%(levelname)s %(name)s: %(message)s")
-        await apply_migrations(settings.database_url.get_secret_value())
-        pool = await create_pool(settings)
-        app.state.services = await services_factory(settings, pool)
-        try:
-            yield
-        finally:
-            await app.state.services.aclose()
-            await pool.close()
+        async with database_url(settings) as url:
+            await apply_migrations(url)
+            pool = await create_pool(settings, url)
+            app.state.services = await services_factory(settings, pool)
+            try:
+                yield
+            finally:
+                await app.state.services.aclose()
+                await pool.close()
 
     app = FastAPI(
         title="AI Investigation Engine",

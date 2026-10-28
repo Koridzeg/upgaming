@@ -7,6 +7,7 @@ is how secrets are injected in production.
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,6 +27,12 @@ class Settings(BaseSettings):
     database_url: SecretStr
     db_pool_min_size: int = 1
     db_pool_max_size: int = 5
+    # "websocket" reaches Neon over port 443 through investigator.tunnel, for hosts that block
+    # outgoing connections to Postgres's port 5432 (e.g. Hugging Face Spaces).
+    database_transport: Literal["tcp", "websocket"] = "tcp"
+    # The production database (Neon), only for `python -m investigator.deploy`. The app itself
+    # always uses DATABASE_URL, which the host's secret store sets to the same value.
+    deploy_database_url: SecretStr | None = None
 
     groq_api_key: SecretStr | None = None
     gemini_api_key: SecretStr | None = None
@@ -54,7 +61,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = 10
 
     # Protecting the free LLM quota (200k tokens/day/model) on a public demo: investigations
-    # per client IP. An investigation costs ~4-10k tokens.
+    # per client IP. An investigation costs 3-18k tokens (median ~9k measured).
     investigations_per_minute: int = 3
     investigations_per_day: int = 25
 

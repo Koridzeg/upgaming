@@ -1,0 +1,13 @@
+# The build only needs backend/ and frontend/ sources. Never send secrets or local state.
+.env
+.git
+**/.venv
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.coverage
+frontend/dist
+frontend/.angular
+data
+eval

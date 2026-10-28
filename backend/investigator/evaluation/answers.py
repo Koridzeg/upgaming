@@ -5,14 +5,14 @@ multi-document, contradictions, unanswerable, decoys, prompt injection) and 22 H
 multi-hop questions from the retrieval test split (16 bridge, 6 comparison, seeded).
 
 Configurations - each uses exactly one model, no fallback, so results are attributable:
-  agent-qwen    the investigation agent on qwen3.8-27b (the run reported in the submission)
-  agent-120b    the agent on gpt-oss-120b
-  single-120b   the single-shot baseline (one search, one answer) on gpt-oss-120b
-  agent-20b     the agent on gpt-oss-20b
-Configurations on different models run in parallel: each Groq model has its own budget.
+  agent-qwen          the investigation agent on qwen3.8-27b (Groq)
+  agent-flash-lite    the agent on gemini-3.5-flash-lite
+  single-flash-lite   the single-shot baseline (one search, one answer) on the same model
+  agent-120b, single-120b, agent-20b   the same on Groq's gpt-oss models
+Configurations on different models run in parallel: each model has its own budget.
 Budget reality (measured): Groq's free tier allows 200,000 tokens per model per day, and the
-full 3-configuration plan needed ~1M tokens - so the submitted run is agent-qwen, on the model
-whose daily budget development hadn't used up.
+original 3-configuration plan needed ~1M tokens. So the agent-vs-baseline comparison runs on
+gemini-3.5-flash-lite, whose quota development hadn't touched.
 
 Judge: a model different from the one being graded (--judge), so no model grades itself.
 
@@ -20,7 +20,9 @@ Every answer and judgment is appended to eval/answers/*.jsonl as soon as it exis
 interrupted run resumes where it stopped.
 
 Usage:
-    python -m investigator.evaluation.answers [--configs agent-120b,single-120b] [--limit N]
+    python -m investigator.evaluation.answers [--configs agent-qwen,agent-flash-lite] [--limit N]
+    python -m investigator.evaluation.answers --configs agent-qwen --retry-failed
+    python -m investigator.evaluation.answers --answers-only   # judge after a quota reset
     python -m investigator.evaluation.answers --report-only
 """
 
@@ -41,7 +43,7 @@ from investigator.embedding import get_embedder
 from investigator.evaluation.datasets import EVAL_DIR, SEED, hotpotqa_questions
 from investigator.evaluation.metrics import paired_bootstrap
 from investigator.evaluation.report import markdown_table
-from investigator.llm.client import GROQ_URL, LLMClient
+from investigator.llm.client import GEMINI_URL, GROQ_URL, LLMClient
 from investigator.llm.errors import LLMError
 from investigator.llm.provider import OpenAICompatibleProvider
 from investigator.llm.types import Message
@@ -49,12 +51,14 @@ from investigator.llm.types import Message
 QUESTIONS_FILE = EVAL_DIR / "answer_questions.json"
 ANSWERS_DIR = EVAL_DIR / "answers"
 CONFIGS = {
-    "agent-qwen": {"model": "qwen/qwen3.8-27b", "single_shot": False},
-    "agent-120b": {"model": "openai/gpt-oss-120b", "single_shot": False},
-    "single-120b": {"model": "openai/gpt-oss-120b", "single_shot": True},
-    "agent-20b": {"model": "openai/gpt-oss-20b", "single_shot": False},
+    "agent-qwen": {"model": "groq:qwen/qwen3.8-27b", "single_shot": False},
+    "agent-flash-lite": {"model": "gemini:gemini-3.5-flash-lite", "single_shot": False},
+    "single-flash-lite": {"model": "gemini:gemini-3.5-flash-lite", "single_shot": True},
+    "agent-120b": {"model": "groq:openai/gpt-oss-120b", "single_shot": False},
+    "single-120b": {"model": "groq:openai/gpt-oss-120b", "single_shot": True},
+    "agent-20b": {"model": "groq:openai/gpt-oss-20b", "single_shot": False},
 }
-DEFAULT_JUDGE = "openai/gpt-oss-20b"
+DEFAULT_JUDGE = "groq:openai/gpt-oss-20b"
 VERDICT_SCORE = {"correct": 1.0, "partial": 0.5, "incorrect": 0.0, "failed": 0.0}
 
 JUDGE_SYSTEM = """\
@@ -123,17 +127,26 @@ def answer_questions() -> list[AnswerQuestion]:
     return questions
 
 
-def groq_provider(model: str, timeout: float = 90.0) -> OpenAICompatibleProvider:
-    """A patient provider: in a batch run, waiting out a rate limit beats switching model.
+def batch_provider(spec: str, timeout: float = 90.0) -> OpenAICompatibleProvider:
+    """A patient provider for "groq:<model>" or "gemini:<model>": in a batch run, waiting out
+    a rate limit beats switching model.
 
     More retries than interactive use, too: malformed generations ('output_parse_failed',
     phantom tools like 'json') are random, and the smoke test lost a whole question to three
     in a row.
     """
-    key = get_settings().groq_api_key.get_secret_value()
+    provider, _, model = spec.partition(":")
+    settings = get_settings()
+    url, key = {
+        "groq": (GROQ_URL, settings.groq_api_key),
+        "gemini": (GEMINI_URL, settings.gemini_api_key),
+    }[provider]
+    # Groq's daily budget refills continuously (~8k tokens/hour), so an overnight run with
+    # LLM_MAX_WAIT_SECONDS=1800 simply waits for each refill instead of failing.
+    max_wait = max(90.0, settings.llm_max_wait_seconds)
     return OpenAICompatibleProvider(
-        f"groq:{model}", GROQ_URL, key, model,
-        timeout=timeout, max_retries=4, max_wait=90.0, max_rate_limit_waits=12,
+        spec, url, key.get_secret_value(), model,
+        timeout=timeout, max_retries=4, max_wait=max_wait, max_rate_limit_waits=12,
     )  # fmt: skip
 
 
@@ -149,6 +162,22 @@ def append_jsonl(path, record: dict) -> None:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def drop_failed(name: str) -> int:
+    """Forget a configuration's failed runs and their judgments, so they are answered again.
+    Only runs that never finished: a wrong answer is a result and stays."""
+    answers_path = ANSWERS_DIR / f"{name}.jsonl"
+    answers = read_jsonl(answers_path)
+    failed = {r["id"] for r in answers if r["status"] == "failed"}
+    for path, rows in [(answers_path, answers),
+                       (ANSWERS_DIR / f"{name}.judgments.jsonl",
+                        read_jsonl(ANSWERS_DIR / f"{name}.judgments.jsonl"))]:  # fmt: skip
+        kept = [r for r in rows if r["id"] not in failed]
+        if path.exists():
+            path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in kept),
+                            encoding="utf-8")  # fmt: skip
+    return len(failed)
+
+
 async def answer_all(names: list[str], questions: list[AnswerQuestion]) -> None:
     pool = await create_pool(get_settings())
     retriever = DatabaseRetriever(pool, get_embedder())
@@ -157,7 +186,7 @@ async def answer_all(names: list[str], questions: list[AnswerQuestion]) -> None:
         by_model[CONFIGS[name]["model"]].append(name)
 
     async def run_model(model: str, configs: list[str]) -> None:
-        client = LLMClient([groq_provider(model)])
+        client = LLMClient([batch_provider(model)])
         try:
             for name in configs:  # same model: one after another, they share its budget
                 agent = Investigator(client, retriever, single_shot=CONFIGS[name]["single_shot"])
@@ -188,11 +217,13 @@ async def judge_all(names: list[str], questions: list[AnswerQuestion], judge_mod
     if judge_model in graded_models:
         raise ValueError(f"{judge_model} would grade its own answers; pick another --judge")
     by_id = {q.id: q for q in questions}
-    judge = LLMClient([groq_provider(judge_model)])
+    judge = LLMClient([batch_provider(judge_model)])
     try:
         for name in names:
             path = ANSWERS_DIR / f"{name}.judgments.jsonl"
-            done = {r["id"] for r in read_jsonl(path)}
+            # "unjudged" (the judge failed, e.g. its daily quota ran out) is retried; the new
+            # verdict is appended, and the report reads the last verdict per question.
+            done = {r["id"] for r in read_jsonl(path) if r["verdict"] != "unjudged"}
             for answer in read_jsonl(ANSWERS_DIR / f"{name}.jsonl"):
                 if answer["id"] in done or answer["id"] not in by_id:
                     continue
@@ -389,13 +420,24 @@ def main() -> None:
     parser.add_argument("--configs", default="agent-qwen", help=f"comma-separated: {list(CONFIGS)}")
     parser.add_argument("--judge", default=DEFAULT_JUDGE, help="model id of the grading model")
     parser.add_argument("--limit", type=int, help="only the first N questions (smoke test)")
+    parser.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="run again the questions whose investigation failed (e.g. quota)",
+    )
+    parser.add_argument("--answers-only", action="store_true", help="answer now, judge later")
     parser.add_argument("--report-only", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args()  # fmt: skip
     names = args.configs.split(",")
     questions = answer_questions()[: args.limit] if args.limit else answer_questions()
     started = time.perf_counter()
+    if args.retry_failed:
+        for name in names:
+            print(f"[{name}] dropped {drop_failed(name)} failed runs to answer again")
     if not args.report_only:
         asyncio.run(answer_all(names, questions))
+        if args.answers_only:
+            return
         asyncio.run(judge_all(names, questions, args.judge))
     results = build_report(names, questions)
     print(render(results))

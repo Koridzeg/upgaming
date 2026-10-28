@@ -214,6 +214,61 @@ Re-ingesting a file is safe: unchanged content is skipped, changed content creat
 version (the old one is kept in `document_versions`), and content already stored under another
 name is reported as a duplicate instead of being stored twice.
 
+## Deployment
+
+```
+browser ──HTTPS──> Render web service (Docker: FastAPI + built Angular UI), Virginia
+                     ├─ Postgres, TLS ──> Neon (Postgres 18 + pgvector), AWS us-east-1
+                     └─ HTTPS ──> Groq, Gemini
+```
+
+| Piece | Free tier (checked 2026-10-28) | What it means for the demo |
+| --- | --- | --- |
+| Render web service | 512 MB RAM, 0.1 CPU, 750 instance-hours a month; sleeps after 15 minutes without traffic; disk not persistent | The app uses ~170 MB idle and ~220 MB during an upload (measured). **The first visit after a sleep waits about a minute** while the container starts; uploads embed slowly on 0.1 CPU |
+| Neon Postgres | 0.5 GB storage, 100 compute-hours a month, scales to zero after 5 idle minutes | One chunking strategy (structural) fits: 405 MB. The first query after idle waits ~1 s for the database to wake |
+| Groq | Per model: 200k tokens/day, 8k tokens/min, 1,000 requests/day | ~20 investigations per model per day (median ~9k tokens each); three models in the chain |
+| Gemini | Per model daily quotas (gemini-3.5-flash: 20 requests/day) | Last in the fallback chain |
+
+Hosting history: the plan was a Hugging Face Space (2 vCPU, 16 GB), but Docker Spaces now need
+a paid PRO account (the API answered `402 Payment Required`), so the demo runs on Render's free
+plan, which fits the measured memory.
+
+**Persistence.** All state is in Neon: documents uploaded on the demo survive restarts and
+redeploys, and the app writes nothing to the container's own disk.
+
+**Secrets.** API keys and the database URL live in `.env` locally (git-ignored, excluded from
+the Docker build context) and in Render's encrypted environment settings in production, which
+the app reads as environment variables. [render.yaml](render.yaml) declares them with
+`sync: false`: Render asks for the values when the service is created, and they never appear in
+the repository. Non-secret settings (`LLM_MODELS`) are in render.yaml.
+
+**Hosts that block port 5432.** Some hosts (Hugging Face Spaces, for one) only allow outgoing
+web ports. Neon also accepts the Postgres protocol inside a TLS WebSocket on 443 (what its
+serverless driver uses), so with `DATABASE_TRANSPORT=websocket` the app starts a small bridge
+([investigator/tunnel.py](backend/investigator/tunnel.py)) on 127.0.0.1 that relays each pooled
+connection over its own WebSocket; asyncpg and every query stay unchanged. Render allows 5432,
+so the demo connects directly; the deploy command verifies Neon through the tunnel.
+
+**The image** ([Dockerfile](Dockerfile)) has three stages: the Angular build, the int8
+embedding model (built from the pinned upstream model with the exact package versions in
+`backend/constraints.txt`; the build fails unless its SHA-256 matches the model that produced
+the stored vectors), and the app, running as a non-root user on the port the host gives it.
+
+**Deploying**
+
+```bash
+# 1. The index: copies the local database (structural chunks only) to Neon - no re-embedding.
+#    .env: DEPLOY_DATABASE_URL = Neon's direct (not pooled) connection string
+python -m investigator.deploy
+
+# 2. The app: push to GitHub, then in Render: New > Blueprint > this repository. Render reads
+#    render.yaml, asks for DATABASE_URL / GROQ_API_KEY / GEMINI_API_KEY, builds the Dockerfile
+#    and redeploys on every push to main.
+
+# The same image locally
+docker build -t investigator . && docker run -p 7860:7860 --env-file .env investigator
+```
+
 ## Repository layout
 
 ```
@@ -223,6 +278,8 @@ backend/
   tests/
 frontend/           Angular UI (standalone components, signals)
 eval/               Evaluation question sets, raw results and reports
+Dockerfile          The production image (UI build, embedding model, app)
+render.yaml         The live demo's service definition (Render Blueprint)
 docker/             Local Postgres init scripts
 docker-compose.yml  Local development database
 ```

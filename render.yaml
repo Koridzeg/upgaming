@@ -1,0 +1,28 @@
+# Render Blueprint: the live demo. In the Render dashboard: New > Blueprint > this repository.
+# Render builds the Dockerfile on every push to main and runs it on the free plan.
+services:
+  - type: web
+    name: investigation-engine
+    runtime: docker
+    plan: free
+    region: virginia # next to the Neon database (AWS us-east-1)
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health # a real database round-trip
+    envVars:
+      # Secrets: `sync: false` means Render asks for the value when the Blueprint is created
+      # and stores it encrypted; it is never in this file or in git.
+      - key: DATABASE_URL # Neon's direct (not pooled) connection string
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      # Every Groq model and every Gemini model has its own daily quota, so a longer chain
+      # serves more investigations a day. The Gemini models passed the live tool-call check
+      # on 2026-10-28 (3.6-flash had no free quota; 3.1-flash-lite and 3.7-flash returned 503).
+      - key: LLM_MODELS
+        value: >-
+          ["groq:openai/gpt-oss-120b", "groq:qwen/qwen3.8-27b", "groq:openai/gpt-oss-20b",
+          "gemini:gemini-3.5-flash-lite", "gemini:gemini-3.5-flash"]
+      - key: LOG_LEVEL
+        value: INFO

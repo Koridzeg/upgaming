@@ -23,6 +23,8 @@ dependencies = [
     "httpx2>=2.16",
     # File uploads (multipart/form-data)
     "python-multipart>=0.0.12",
+    # Postgres over a WebSocket on port 443, where port 5432 is blocked (investigator.tunnel)
+    "websockets>=15",
 ]
 
 [project.optional-dependencies]

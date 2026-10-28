@@ -1,11 +1,29 @@
 """PostgreSQL connection pool shared by the whole application."""
 
 import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import asyncpg
 from pgvector.asyncpg import register_vector
 
 from investigator.config import Settings
+from investigator.tunnel import asyncpg_url, local_port, start_bridge, tunnelled_url, websocket_url
+
+
+@asynccontextmanager
+async def database_url(settings: Settings) -> AsyncIterator[str]:
+    """The URL the app connects with: the configured one, or a local bridge to it over a
+    WebSocket when `database_transport` is "websocket". The bridge lives as long as the app."""
+    url = asyncpg_url(settings.database_url.get_secret_value())
+    if settings.database_transport == "tcp":
+        yield url
+        return
+    bridge = await start_bridge(websocket_url(url))
+    try:
+        yield tunnelled_url(url, local_port(bridge))
+    finally:
+        bridge.close()
 
 
 async def init_connection(conn: asyncpg.Connection) -> None:
@@ -16,9 +34,10 @@ async def init_connection(conn: asyncpg.Connection) -> None:
     await conn.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
 
 
-async def create_pool(settings: Settings) -> asyncpg.Pool:
+async def create_pool(settings: Settings, url: str | None = None) -> asyncpg.Pool:
+    """A pool on `url` (from `database_url`), or straight to the configured database."""
     return await asyncpg.create_pool(
-        dsn=settings.database_url.get_secret_value(),
+        dsn=url or asyncpg_url(settings.database_url.get_secret_value()),
         min_size=settings.db_pool_min_size,
         max_size=settings.db_pool_max_size,
         init=init_connection,
