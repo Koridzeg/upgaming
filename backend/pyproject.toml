@@ -10,10 +10,13 @@ dependencies = [
     "pydantic-settings>=2.6",
     "asyncpg>=0.30",
     "pgvector>=0.3.6",
+    "numpy>=2.1",
     # Document loaders
     "pdfplumber>=0.11",
     "python-docx>=1.1",
     "beautifulsoup4>=4.12",
+    # Chunking: the embedding model's own tokenizer
+    "tokenizers>=0.20",
 ]
 
 [project.optional-dependencies]

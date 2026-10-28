@@ -16,6 +16,7 @@ from pathlib import Path
 
 from investigator.config import DATA_DIR
 from investigator.datasets.download import download
+from investigator.ingestion.models import Block, LoadedDocument
 from investigator.text import normalize_text
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,33 @@ class Paragraph:
         # HotpotQA keeps the leading space on every sentence after the first,
         # so plain concatenation restores the original paragraph.
         return "".join(self.sentences).strip()
+
+
+def to_document(record: dict) -> LoadedDocument:
+    """A corpus.jsonl record as a loaded document: one paragraph block.
+
+    The sentence boundaries are kept in the metadata, because HotpotQA's gold labels point at
+    sentences and the evaluation needs to know where each sentence sits in the text.
+    """
+    paragraph = Paragraph(record["title"], record["sentences"])
+    text = paragraph.text
+    lead = len("".join(paragraph.sentences)) - len("".join(paragraph.sentences).lstrip())
+    spans, position = [], -lead  # positions in `text`, which has its leading space stripped
+    for sentence in paragraph.sentences:
+        start = position + len(sentence) - len(sentence.lstrip())  # skip the leading space
+        position += len(sentence)
+        spans.append([max(start, 0), min(position, len(text))])
+    return LoadedDocument(
+        title=paragraph.title,
+        file_format="txt",
+        blocks=[Block("paragraph", text)],
+        metadata={"sentence_spans": spans},
+    )
+
+
+def read_corpus(path: Path = OUT_DIR / "corpus.jsonl") -> list[dict]:
+    with path.open(encoding="utf-8") as f:
+        return [json.loads(line) for line in f]
 
 
 def load_examples(path: Path) -> list[dict]:

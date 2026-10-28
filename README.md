@@ -58,6 +58,20 @@ the same model (title, metadata, ordered blocks). To see what a file turns into:
 python -m investigator.ingestion.loaders path/to/file.pdf
 ```
 
+## Ingesting files
+
+```bash
+# Load, deduplicate, chunk and store files (both chunking strategies, for comparison)
+python -m investigator.ingestion.cli data/synthetic/corpus/* --strategies fixed,structural
+
+# Duplicate and chunking statistics for both corpora
+python -m investigator.ingestion.report
+```
+
+Re-ingesting a file is safe: unchanged content is skipped, changed content creates a new
+version (the old one is kept in `document_versions`), and content already stored under another
+name is reported as a duplicate instead of being stored twice.
+
 ## Repository layout
 
 ```
