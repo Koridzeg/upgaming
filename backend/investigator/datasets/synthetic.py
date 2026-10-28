@@ -9,13 +9,18 @@ in its final format and is copied unchanged. Output goes to data/synthetic/corpu
 Usage: python -m investigator.datasets.synthetic
 """
 
-import re
 import shutil
-from dataclasses import dataclass, field
+import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
 from investigator.config import DATA_DIR
+from investigator.ingestion.markdown import (
+    MarkdownBlock,
+    parse_markdown,
+    split_front_matter,
+    strip_inline,
+)
 
 SYNTHETIC_DIR = DATA_DIR / "synthetic"
 SOURCE_DIR = SYNTHETIC_DIR / "source"
@@ -25,79 +30,14 @@ CORPUS_DIR = SYNTHETIC_DIR / "corpus"
 EXACT_COPIES = {"postmortem-INC-2026-0311 (copy).pdf": "postmortem-INC-2026-0311.pdf"}
 
 
-def split_front_matter(text: str) -> tuple[dict[str, str], str]:
-    """Split a `---`-delimited `key: value` header from the Markdown body."""
-    if not text.startswith("---\n"):
-        return {}, text
-    header, _, body = text[4:].partition("\n---\n")
-    meta = {}
-    for line in header.splitlines():
-        key, sep, value = line.partition(":")
-        if sep:
-            meta[key.strip()] = value.strip()
-    return meta, body
-
-
-@dataclass
-class Block:
-    kind: str  # 'heading' | 'paragraph' | 'bullets' | 'numbered' | 'table'
-    level: int = 0  # heading level
-    text: str = ""  # heading or paragraph text
-    items: list = field(default_factory=list)  # list items, or table rows (lists of cells)
-
-
-def parse_blocks(markdown: str) -> list[Block]:
-    """Parse the Markdown subset our sources use: headings, paragraphs, lists and tables.
-
-    Consecutive lines of the same kind extend the current block; a blank line or a heading
-    ends it.
-    """
-    blocks: list[Block] = []
-    current: Block | None = None
-
-    for line in markdown.splitlines():
-        s = line.strip()
-        if not s:
-            current = None
-            continue
-        if s.startswith("#"):
-            level = len(s) - len(s.lstrip("#"))
-            blocks.append(Block("heading", level=level, text=s[level:].strip()))
-            current = None
-            continue
-
-        if s.startswith("|"):
-            kind, item = "table", [cell.strip() for cell in s.strip("|").split("|")]
-            if all(set(cell) <= set("-: ") for cell in item):
-                continue  # the |---|---| row under a table header
-        elif s.startswith("- "):
-            kind, item = "bullets", s[2:]
-        elif m := re.match(r"\d+\.\s+", s):
-            kind, item = "numbered", s[m.end() :]
-        else:
-            kind, item = "paragraph", s
-
-        if current is None or current.kind != kind:
-            current = Block(kind)
-            blocks.append(current)
-        if kind == "paragraph":
-            # Lines of one paragraph are separate here (e.g. "Author: ..." / "Date: ...").
-            current.text = f"{current.text}\n{item}" if current.text else item
-        else:
-            current.items.append(item)
-    return blocks
-
-
-def plain(text: str) -> str:
-    """Drop inline Markdown markers that PDF/DOCX would show literally."""
-    return text.replace("**", "").replace("`", "")
+plain = strip_inline  # PDF/DOCX would show inline Markdown markers literally
 
 
 def _date(meta: dict[str, str]) -> datetime:
     return datetime.fromisoformat(meta["date"]).replace(tzinfo=UTC)
 
 
-def render_pdf(meta: dict[str, str], blocks: list[Block], path: Path) -> None:
+def render_pdf(meta: dict[str, str], blocks: list[MarkdownBlock], path: Path) -> None:
     from fpdf import FPDF
 
     pdf = FPDF(format="A4")
@@ -135,7 +75,7 @@ def render_pdf(meta: dict[str, str], blocks: list[Block], path: Path) -> None:
     pdf.output(str(path))
 
 
-def render_docx(meta: dict[str, str], blocks: list[Block], path: Path) -> None:
+def render_docx(meta: dict[str, str], blocks: list[MarkdownBlock], path: Path) -> None:
     from docx import Document
 
     doc = Document()
@@ -165,6 +105,21 @@ def render_docx(meta: dict[str, str], blocks: list[Block], path: Path) -> None:
                 for c, cell in enumerate(row):
                     table.cell(r, c).text = plain(cell)
     doc.save(str(path))
+    _fix_zip_timestamps(path)
+
+
+def _fix_zip_timestamps(path: Path) -> None:
+    """Make a DOCX byte-for-byte reproducible.
+
+    A DOCX is a zip archive, and python-docx stamps every entry with the current time, so each
+    build would produce different bytes (and a git diff) for identical content.
+    """
+    with zipfile.ZipFile(path) as source:
+        entries = [(info.filename, source.read(info)) for info in source.infolist()]
+    with zipfile.ZipFile(path, "w") as target:
+        for name, content in entries:
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            target.writestr(info, content, compress_type=zipfile.ZIP_DEFLATED)
 
 
 RENDERERS = {"pdf": render_pdf, "docx": render_docx}
@@ -184,7 +139,7 @@ def build(source_dir: Path = SOURCE_DIR, corpus_dir: Path = CORPUS_DIR) -> list[
         target = meta.get("render")
         if target:
             out = corpus_dir / f"{source.stem}.{target}"
-            RENDERERS[target](meta, parse_blocks(body), out)
+            RENDERERS[target](meta, parse_markdown(body), out)
         else:
             out = corpus_dir / source.name
             shutil.copyfile(source, out)

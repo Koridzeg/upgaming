@@ -49,6 +49,15 @@ python -m investigator.datasets.synthetic     # -> data/synthetic/corpus/ (15 fi
 - **Synthetic incident corpus**: a fictional company's documents with planted contradictions,
   gaps, decoys and a prompt-injection page. See [data/synthetic/README.md](data/synthetic/README.md).
 
+## Supported file formats
+
+PDF, DOCX, HTML, Markdown, plain text, JSON / JSON Lines and CSV. Every format is converted to
+the same model (title, metadata, ordered blocks). To see what a file turns into:
+
+```bash
+python -m investigator.ingestion.loaders path/to/file.pdf
+```
+
 ## Repository layout
 
 ```
