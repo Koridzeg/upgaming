@@ -12,6 +12,7 @@ from websockets.asyncio.server import serve
 
 from investigator.tunnel import (
     asyncpg_url,
+    describe_url,
     local_port,
     start_bridge,
     tunnelled_url,
@@ -77,3 +78,9 @@ def test_neon_urls_are_rewritten_for_asyncpg_and_the_bridge():
     assert (
         tunnelled_url(NEON, 6543) == "postgresql://app:s3cret@127.0.0.1:6543/neondb?sslmode=disable"
     )
+
+
+def test_the_logged_database_target_has_no_credentials():
+    assert describe_url(NEON) == "ep-cool-name-123.us-east-1.aws.neon.tech:5432/neondb"
+    local = "postgresql://u:p@localhost:5433/investigator"
+    assert describe_url(local) == "localhost:5433/investigator"

@@ -61,3 +61,5 @@
 {"id": "5ac09da45542996f0d89cc1d", "verdict": "correct", "reason": "The answer correctly states that both drinks have orange as their main flavor, matching the reference."}
 {"id": "5abbee315542993f40c73c1d", "verdict": "incorrect", "reason": "The answer does not explicitly state that it can read both magazines, missing the key fact that the reference answer is \"yes\"."}
 {"id": "5abd81ff5542993062266cb3", "verdict": "partial", "reason": "The answer correctly states that both are Eastern Orthodox churches, but it omits the key detail that they are specifically Greek Eastern Orthodox."}
+{"id": "5ac2759655429921a00aaf7f", "verdict": "correct", "reason": "The answer correctly states that both artists are associated with rock music, matching the reference."}
+{"id": "5a8e068b5542995085b37384", "verdict": "correct", "reason": "The answer correctly states that both Ferocactus and Silene are types of plants, matching the reference."}

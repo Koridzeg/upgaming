@@ -1,6 +1,7 @@
 """PostgreSQL connection pool shared by the whole application."""
 
 import json
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -8,7 +9,16 @@ import asyncpg
 from pgvector.asyncpg import register_vector
 
 from investigator.config import Settings
-from investigator.tunnel import asyncpg_url, local_port, start_bridge, tunnelled_url, websocket_url
+from investigator.tunnel import (
+    asyncpg_url,
+    describe_url,
+    local_port,
+    start_bridge,
+    tunnelled_url,
+    websocket_url,
+)
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -16,6 +26,8 @@ async def database_url(settings: Settings) -> AsyncIterator[str]:
     """The URL the app connects with: the configured one, or a local bridge to it over a
     WebSocket when `database_transport` is "websocket". The bridge lives as long as the app."""
     url = asyncpg_url(settings.database_url.get_secret_value())
+    # A wrong DATABASE_URL on the host otherwise shows up only as "Connection refused".
+    logger.info("database: %s over %s", describe_url(url), settings.database_transport)
     if settings.database_transport == "tcp":
         yield url
         return

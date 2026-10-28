@@ -74,6 +74,12 @@ def websocket_url(database_url: str) -> str:
     return f"wss://{urlsplit(database_url).hostname}/v2"
 
 
+def describe_url(database_url: str) -> str:
+    """host:port/database, safe to log: no user name or password."""
+    parts = urlsplit(database_url)
+    return f"{parts.hostname}:{parts.port or 5432}{parts.path}"
+
+
 def asyncpg_url(database_url: str) -> str:
     """Drop `channel_binding`: Neon's connection strings include it, asyncpg doesn't know it
     and would send it to the server as a setting, which the server rejects."""

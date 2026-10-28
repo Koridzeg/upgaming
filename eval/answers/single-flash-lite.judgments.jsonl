@@ -40,3 +40,23 @@
 {"id": "5abd81ff5542993062266cb3", "verdict": "unjudged", "reason": "all providers failed: [groq:openai/gpt-oss-20b] 429 {\"error\":{\"message\":\"Rate limit reached for model `openai/gpt-oss-20b` in organization `org_01kh3gx1cfe98ve3ef6tmzw2cj` service tier `on_demand` on "}
 {"id": "5ac2759655429921a00aaf7f", "verdict": "unjudged", "reason": "all providers failed: [groq:openai/gpt-oss-20b] 429 {\"error\":{\"message\":\"Rate limit reached for model `openai/gpt-oss-20b` in organization `org_01kh3gx1cfe98ve3ef6tmzw2cj` service tier `on_demand` on "}
 {"id": "5a8e068b5542995085b37384", "verdict": "unjudged", "reason": "all providers failed: [groq:openai/gpt-oss-20b] 429 {\"error\":{\"message\":\"Rate limit reached for model `openai/gpt-oss-20b` in organization `org_01kh3gx1cfe98ve3ef6tmzw2cj` service tier `on_demand` on "}
+{"id": "S01", "verdict": "partial", "reason": "The answer correctly lists the two changes (CHG-2044 and CHG-2041) and the affected services, and provides documents, but it omits the reference fact that CHG-2043 was ruled out."}
+{"id": "S02", "verdict": "incorrect", "reason": "The answer only cites 14:05 UTC and a vague postmortem range, ignoring the postmortem’s 13:52 UTC claim and the documented disagreement."}
+{"id": "S03", "verdict": "partial", "reason": "The answer correctly cites the 9,000 and 11,900 figures but omits the 12,400 figure from the final postmortem/Q1 review and the note that the final postmortem is the most authoritative source."}
+{"id": "S04", "verdict": "correct", "reason": "The answer correctly states the 150‑size increase, acknowledges the conflicting 200‑size claim, and presents both values as reported, matching the reference."}
+{"id": "S05", "verdict": "correct", "reason": "The answer correctly states that CHG-2041 has no approver on record, matching the reference."}
+{"id": "S06", "verdict": "correct", "reason": "The answer correctly states that the financial cost is not documented, matching the reference."}
+{"id": "S07", "verdict": "correct", "reason": "The answer correctly states that no April 2026 payment outage is documented, matching the reference."}
+{"id": "S08", "verdict": "correct", "reason": "The answer correctly states the minimum connection pool size of 150 and notes that it cannot be reduced below that without a load test, matching the reference."}
+{"id": "S09", "verdict": "partial", "reason": "The answer lists the rollout stages correctly but omits the key requirement that the p99 latency must stay below 150 ms throughout."}
+{"id": "S10", "verdict": "correct", "reason": "The answer correctly states that the gateway holds a database connection during the fraud call, that the required connections depend on rate × latency, and that the 80 ms latency required ~26 connections (fits 60) while the 450 ms latency required ~144 connections (exceeds 60)."}
+{"id": "S11", "verdict": "correct", "reason": "Answer correctly states that the migration was ruled out as a cause of the incident, matching the reference."}
+{"id": "S12", "verdict": "correct", "reason": "Answer correctly states the cause and that card payments were not affected."}
+{"id": "S13", "verdict": "correct", "reason": "The answer correctly identifies the incident (INC-2026-0217 on 17 February 2026) and its cause (slow responses from the external acquiring partner NetAcq)."}
+{"id": "S14", "verdict": "correct", "reason": "The answer correctly states the incident was not caused by a DDoS attack, acknowledges the vendor advisory claim, and attributes the incident to internal changes, matching the reference without contradiction."}
+{"id": "S15", "verdict": "incorrect", "reason": "The answer omits AI‑2, which the reference states is still in progress and therefore open; it incorrectly claims only AI‑4 remains open."}
+{"id": "S16", "verdict": "correct", "reason": "The answer correctly states the settlement batch started 47 minutes late, matching the reference."}
+{"id": "S17", "verdict": "correct", "reason": "Answer matches all key facts."}
+{"id": "S18", "verdict": "correct", "reason": "The answer correctly states the alert ID, description, start time, and resolution time, matching the reference answer."}
+{"id": "S19", "verdict": "correct", "reason": "The answer correctly states that Marco Silva was the incident commander for INC-2026-0311 and does not contradict the reference."}
+{"id": "S20", "verdict": "partial", "reason": "It correctly states that the normal p99 latency is not documented, but it omits the reference’s mention of the p95 warning above 500 ms on 2026‑03‑05."}
