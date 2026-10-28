@@ -64,3 +64,13 @@
 {"id": "5a8b128455429971feec463b", "verdict": "incorrect", "reason": "The answer does not state Honolulu, the city given in the reference, and instead lists multiple beach locations, contradicting the reference."}
 {"id": "5abbdf8055429931dba145bb", "verdict": "incorrect", "reason": "The answer does not provide the required company (Prada) and incorrectly states that no evidence exists."}
 {"id": "5abbeb7d554299114383a09b", "verdict": "correct", "reason": "The answer correctly states that the Pulsed Pressure Cavitation Technique was developed at Oak Ridge National Laboratory, which is sponsored by the U.S. Department of Energy, matching the reference."}
+{"id": "5ac38bf355429939154137ba", "verdict": "incorrect", "reason": "The answer fails to state that McGrath opposed united Ireland, contradicting the reference."}
+{"id": "5ae4cb2f55429960a22e01e8", "verdict": "correct", "reason": "The answer correctly identifies Linda Ronstadt as the singer who recorded J. D. Souther's song and matches the reference."}
+{"id": "5a79395455429970f5fffe7d", "verdict": "correct", "reason": "The answer correctly states the lead character’s name, Maxwell Smart, and matches the reference answer without adding incorrect information."}
+{"id": "5ae5ff635542996de7b71ace", "verdict": "incorrect", "reason": "The answer states the single reached number 6, but the reference answer indicates it reached number 8."}
+{"id": "5a810006554299260e20a1f6", "verdict": "correct", "reason": "The answer correctly identifies Jango Fett as the character who raised Boba Fett, matching the reference."}
+{"id": "5ae63e3255429929b0807aff", "verdict": "correct", "reason": "The answer correctly identifies the Cincinnati metropolitan area and matches the reference information."}
+{"id": "5ac160bb5542994d76dccdfb", "verdict": "correct", "reason": "The answer correctly states that the publisher belongs to Southern Progress Corporation, matching the reference, and adds extra non‑contradictory detail."}
+{"id": "5ac285335542996773102552", "verdict": "correct", "reason": "The answer correctly states the birthday as 9 November 1967, matching the reference."}
+{"id": "5abdd8d95542991f6610606a", "verdict": "correct", "reason": "The answer correctly states that the season containing Lisa Kudrow’s voice had twenty-three episodes, matching the reference."}
+{"id": "5ab492155542991779162ce3", "verdict": "correct", "reason": "Answer correctly identifies General Allenby as the English soldier who requested the formation."}

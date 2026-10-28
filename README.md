@@ -4,8 +4,9 @@ A multi-document investigation system: it searches a large document collection, 
 facts across sources, and answers with citations, flagging contradictions and refusing to
 answer when the evidence is insufficient.
 
-> Work in progress. This README grows with each build step; architecture, design decisions,
-> evaluation results and deployment notes will be added as those parts are built.
+**Live demo:** <https://investigation-engine-jpin.onrender.com/> (66,569 documents). It runs on
+free plans: the first visit after 15 idle minutes takes about a minute while the server wakes,
+and each LLM has a daily token budget (see [Deployment](#deployment)).
 
 ## Local development
 
@@ -104,7 +105,9 @@ with paired-bootstrap confidence intervals. See [eval/retrieval_report.md](eval/
 
 The agent searches in as many steps as it needs (each search can use what the previous one
 revealed), then answers with `[E#]` citations, reports contradictions between sources, and says
-so when the evidence is insufficient. A second LLM pass checks every cited claim.
+so when the evidence is insufficient. Citations to evidence the model was never shown are
+removed, and an answer that cites nothing is sent back once to add citations. A second LLM pass
+checks every cited claim against its evidence.
 
 ```bash
 python -m investigator.agent "Which system changes caused the payment processing delays in March 2026?"
@@ -116,10 +119,20 @@ Groq and Gemini, through their OpenAI-compatible APIs, behind one client with re
 (exponential backoff, or the provider's own `Retry-After`), a fallback chain of models
 (`LLM_MODELS`), a circuit breaker, tool calling, streaming and token/latency counters.
 
-Free-tier limits measured on 2026-10-28, which shape the defaults: every Groq model has its own
-1,000 requests/day and 8,000 tokens/minute; Gemini allows 5 requests/minute and 20/day. So the
-chain is `gpt-oss-120b` -> `gpt-oss-20b` (Groq, separate budgets) -> `gemini-3.5-flash` (last
-resort, independent provider).
+Free-tier limits measured on 2026-10-28, which shape the chain: every Groq model has its own
+budget of 200,000 tokens/day, 8,000 tokens/minute and 1,000 requests/day; every Gemini model has
+its own daily quota (`gemini-3.5-flash`: 20 requests/day, 5/minute). A median investigation uses
+~9k tokens, so one Groq model serves only about 20 a day, and the chain spreads the load over
+models with separate budgets:
+
+| Where | `LLM_MODELS` |
+| --- | --- |
+| Default (local) | `gpt-oss-120b` -> `gpt-oss-20b` (Groq) -> `gemini-3.5-flash` |
+| Live demo ([render.yaml](render.yaml)) | `gpt-oss-120b` -> `qwen3.8-27b` -> `gpt-oss-20b` (Groq) -> `gemini-3.5-flash-lite` -> `gemini-3.5-flash` |
+
+A model whose budget is spent answers 429 with a long `Retry-After`; rather than wait, the
+client moves on to the next model, and after 3 failures in a row a circuit breaker skips that
+model for 60 seconds before letting one probe call through.
 
 ```bash
 python -m investigator.llm --models   # model ids your keys can use
@@ -129,16 +142,44 @@ python -m investigator.llm            # live tool-call round trip + streaming pe
 ## Answer evaluation
 
 ```bash
-python -m investigator.evaluation.answers        # ~1 hour on the free tier; resumable
-python -m investigator.evaluation.answers --report-only
+python -m investigator.evaluation.answers --configs agent-flash-lite,single-flash-lite
+python -m investigator.evaluation.answers --configs agent-qwen --answers-only   # judge later
+python -m investigator.evaluation.answers --configs agent-qwen --retry-failed
+python -m investigator.evaluation.answers --configs agent-flash-lite,single-flash-lite --report-only
 ```
 
-42 questions (`eval/answer_questions.json`): the 20 synthetic questions (multi-document,
-contradictions, unanswerable, decoys, prompt injection) and 22 HotpotQA multi-hop questions
-from the retrieval test split. Three configurations, each on a single model: the agent on
-gpt-oss-120b, a single-shot baseline (one search, one answer) on the same model, and the agent
-on gpt-oss-20b. A third model (qwen3.8-27b) judges correctness against reference answers.
-Results: [eval/answer_report.md](eval/answer_report.md).
+42 questions, frozen in `eval/answer_questions.json`: the 20 synthetic questions
+(single- and multi-document, contradictions, unanswerable, decoys, prompt injection) and 22
+HotpotQA multi-hop questions from the retrieval test split (16 bridge, 6 comparison).
+
+Each configuration uses exactly one model with no fallback, so a result can be attributed:
+
+| Configuration | What it is |
+| --- | --- |
+| `agent-flash-lite` | The investigation agent on `gemini-3.5-flash-lite` |
+| `single-flash-lite` | The baseline on the same model: one search with the question as asked, one answer |
+| `agent-qwen` | The agent on Groq's `qwen3.8-27b` |
+
+The main comparison is the agent against the baseline on the same model. Gemini flash-lite
+carries it because Groq's 200k tokens/day per model couldn't fit the original plan (~1M
+tokens).
+
+A different model (`gpt-oss-20b`) grades each answer against the reference answer as
+correct, partial or incorrect, so no model grades itself. The report also measures, without
+the judge:
+- citation precision and recall against the gold documents;
+- evidence recall (gold documents the agent saw);
+- the share of claims the verifier found supported by their citations;
+- abstention on unanswerable questions;
+- contradiction detection;
+- the prompt-injection question;
+- cost per question.
+
+A paired bootstrap gives a 95% confidence interval for the difference between configurations.
+
+Every answer and judgment is appended to `eval/answers/*.jsonl` as soon as it exists, so an
+interrupted run, or one stopped by a spent quota, resumes where it stopped. Results:
+[eval/answer_report.md](eval/answer_report.md).
 
 ## Web UI and API
 
