@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Kestrel Pay Status - Incident History, March 2026</title>
+  <meta name="author" content="Kestrel Pay Support">
+  <meta name="date" content="2026-03-31">
+  <style>body { font-family: sans-serif; } .update { margin-bottom: 1em; }</style>
+</head>
+<body>
+  <nav><a href="/">Home</a> | <a href="/status">Status</a> | <a href="/subscribe">Subscribe to updates</a></nav>
+
+  <main>
+    <h1>Kestrel Pay system status: incident history, March 2026</h1>
+
+    <section>
+      <h2>Delayed payment notifications - 23-24 March 2026</h2>
+      <p class="update"><strong>Resolved</strong> - 24 Mar, 01:20 UTC: Receipt emails and merchant webhooks are being delivered normally. Card payments were not affected.</p>
+      <p class="update"><strong>Investigating</strong> - 23 Mar, 22:30 UTC: Some receipt emails and merchant webhooks are delayed.</p>
+    </section>
+
+    <section>
+      <h2>Delayed card payments - 11 March 2026</h2>
+      <p class="update"><strong>Resolved</strong> - 16:50 UTC: Between 14:05 and 16:40 UTC some card payments were delayed or failed. All systems are operating normally. Affected components: Card payments, Checkout API.</p>
+      <p class="update"><strong>Monitoring</strong> - 15:30 UTC: We have rolled back a recent change to a risk-scoring component and payment latency is recovering.</p>
+      <p class="update"><strong>Investigating</strong> - 14:20 UTC: We are investigating delays and timeouts affecting some card payments.</p>
+    </section>
+  </main>
+
+  <footer>&copy; 2026 Kestrel Pay. Subscribe to receive status updates by email.</footer>
+  <script>window.statusPageVersion = "2.4.1";</script>
+</body>
+</html>

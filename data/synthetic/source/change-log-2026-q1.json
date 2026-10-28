@@ -1,0 +1,141 @@
+{
+  "export": "Kestrel Pay change management",
+  "generated_at": "2026-04-01T08:00:00Z",
+  "changes": [
+    {
+      "id": "CHG-2031",
+      "date": "2026-02-24T20:00:00Z",
+      "service": "ledger-service",
+      "summary": "Upgrade ledgerdb PostgreSQL from 16.3 to 16.4",
+      "type": "standard",
+      "risk": "low",
+      "author": "Tomasz Wójcik",
+      "approver": "Lea Brandt",
+      "status": "completed",
+      "related_incident": null
+    },
+    {
+      "id": "CHG-2038",
+      "date": "2026-03-02T10:00:00Z",
+      "service": "auth-service",
+      "summary": "Rotate merchant API key signing keys",
+      "type": "standard",
+      "risk": "low",
+      "author": "Yuki Tanaka",
+      "approver": "Lea Brandt",
+      "status": "completed",
+      "related_incident": null
+    },
+    {
+      "id": "CHG-2040",
+      "date": "2026-03-08T07:00:00Z",
+      "service": "ledger-service",
+      "summary": "Move ledgerdb to a smaller instance class (max_connections 400 -> 200) to cut cost",
+      "type": "standard",
+      "risk": "medium",
+      "author": "Tomasz Wójcik",
+      "approver": "Lea Brandt",
+      "status": "completed",
+      "related_incident": null
+    },
+    {
+      "id": "CHG-2041",
+      "date": "2026-03-09T14:00:00Z",
+      "service": "payment-gateway",
+      "summary": "Reduce ledgerdb connection pool max_size from 200 to 60",
+      "details": "Follow-up to CHG-2040: leave connection headroom for ledger-service on the smaller ledgerdb instance.",
+      "type": "standard",
+      "risk": "low",
+      "author": "Priya Nair",
+      "approver": null,
+      "status": "completed",
+      "related_incident": null
+    },
+    {
+      "id": "CHG-2043",
+      "date": "2026-03-10T21:15:00Z",
+      "service": "ledger-service",
+      "summary": "Add index on ledger_entries (merchant_id, created_at) using CREATE INDEX CONCURRENTLY",
+      "details": "Index build completed at 22:40 UTC.",
+      "type": "standard",
+      "risk": "medium",
+      "author": "Tomasz Wójcik",
+      "approver": "Lea Brandt",
+      "status": "completed",
+      "related_incident": null
+    },
+    {
+      "id": "CHG-2044",
+      "date": "2026-03-11T09:30:00Z",
+      "service": "fraud-scoring",
+      "summary": "Roll out fraud model v3.3 (adds device-fingerprint features) to 100% of traffic",
+      "details": "Canary stage skipped to meet the card-network compliance deadline of 2026-03-12.",
+      "type": "standard",
+      "risk": "medium",
+      "author": "Daniel Okafor",
+      "approver": "Hannah Lindqvist",
+      "status": "completed",
+      "related_incident": "INC-2026-0311"
+    },
+    {
+      "id": "CHG-2045",
+      "date": "2026-03-11T11:00:00Z",
+      "service": "merchant-api",
+      "summary": "Renew TLS certificate for api.kestrelpay.example",
+      "type": "standard",
+      "risk": "low",
+      "author": "Yuki Tanaka",
+      "approver": "Lea Brandt",
+      "status": "completed",
+      "related_incident": null
+    },
+    {
+      "id": "CHG-2047",
+      "date": "2026-03-11T15:20:00Z",
+      "service": "fraud-scoring",
+      "summary": "Emergency rollback of the fraud model from v3.3 to v3.2",
+      "type": "emergency",
+      "risk": "low",
+      "author": "Daniel Okafor",
+      "approver": "Marco Silva",
+      "status": "completed",
+      "related_incident": "INC-2026-0311"
+    },
+    {
+      "id": "CHG-2048",
+      "date": "2026-03-11T16:35:00Z",
+      "service": "payment-gateway",
+      "summary": "Emergency: raise ledgerdb connection pool max_size from 60 to 150",
+      "type": "emergency",
+      "risk": "low",
+      "author": "Priya Nair",
+      "approver": "Marco Silva",
+      "status": "completed",
+      "related_incident": "INC-2026-0311"
+    },
+    {
+      "id": "CHG-2051",
+      "date": "2026-03-23T21:30:00Z",
+      "service": "kafka",
+      "summary": "Upgrade Kafka brokers from 3.6 to 3.7",
+      "type": "standard",
+      "risk": "medium",
+      "author": "Samir Haddad",
+      "approver": "Lea Brandt",
+      "status": "completed",
+      "related_incident": "INC-2026-0324"
+    },
+    {
+      "id": "CHG-2055",
+      "date": "2026-04-08T09:00:00Z",
+      "service": "payment-gateway",
+      "summary": "Release the ledgerdb connection before calling fraud-scoring (fixes TD-112, postmortem action AI-2)",
+      "type": "standard",
+      "risk": "medium",
+      "author": "Priya Nair",
+      "approver": "Lea Brandt",
+      "status": "scheduled",
+      "related_incident": "INC-2026-0311"
+    }
+  ]
+}

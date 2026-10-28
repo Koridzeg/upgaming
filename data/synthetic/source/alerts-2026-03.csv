@@ -1,0 +1,19 @@
+timestamp_utc,alert_id,service,alert,severity,state
+2026-03-03T08:14:00Z,ALR-88101,ledger-service,ledgerdb disk usage above 80%,warning,firing
+2026-03-03T11:02:00Z,ALR-88101,ledger-service,ledgerdb disk usage above 80%,warning,resolved
+2026-03-05T16:20:00Z,ALR-88140,auth-service,p95 latency above 500ms for 5m,warning,firing
+2026-03-05T16:31:00Z,ALR-88140,auth-service,p95 latency above 500ms for 5m,warning,resolved
+2026-03-11T13:49:00Z,ALR-88210,fraud-scoring,p99 latency above 300ms for 5m,warning,firing
+2026-03-11T13:58:00Z,ALR-88211,payment-gateway,p95 latency above 2s for 5m,warning,firing
+2026-03-11T14:05:00Z,ALR-88212,merchant-api,5xx rate above 2%,critical,firing
+2026-03-11T15:24:00Z,ALR-88210,fraud-scoring,p99 latency above 300ms for 5m,warning,resolved
+2026-03-11T15:31:00Z,ALR-88212,merchant-api,5xx rate above 2%,critical,resolved
+2026-03-11T16:42:00Z,ALR-88211,payment-gateway,p95 latency above 2s for 5m,warning,resolved
+2026-03-11T17:10:00Z,ALR-88215,notification-service,consumer lag above 10000 events,warning,firing
+2026-03-11T18:55:00Z,ALR-88215,notification-service,consumer lag above 10000 events,warning,resolved
+2026-03-12T02:47:00Z,ALR-88220,settlement-batch,nightly run started more than 30m late,warning,firing
+2026-03-12T04:05:00Z,ALR-88220,settlement-batch,nightly run started more than 30m late,warning,resolved
+2026-03-23T22:16:00Z,ALR-88301,notification-service,consumer lag above 10000 events,critical,firing
+2026-03-24T01:15:00Z,ALR-88301,notification-service,consumer lag above 10000 events,critical,resolved
+2026-03-26T09:40:00Z,ALR-88320,payment-gateway,ledgerdb pool utilisation above 90% for 2m,warning,firing
+2026-03-26T09:44:00Z,ALR-88320,payment-gateway,ledgerdb pool utilisation above 90% for 2m,warning,resolved

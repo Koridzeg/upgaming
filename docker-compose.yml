@@ -1,0 +1,23 @@
+# Local development database only. Production uses a managed Postgres (Neon) instead.
+services:
+  db:
+    image: pgvector/pgvector:0.8.0-pg17
+    environment:
+      POSTGRES_USER: investigator
+      POSTGRES_PASSWORD: investigator
+      POSTGRES_DB: investigator
+    ports:
+      # Host port 5433 so this never collides with a locally installed Postgres on 5432
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Scripts here run once, when the data volume is first created
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U investigator -d investigator"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

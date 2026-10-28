@@ -1,0 +1,25 @@
+# Secrets: real keys live only in .env locally and in the host's secret store in production
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Data: downloaded and generated datasets are reproducible from scripts, so they aren't committed
+data/raw/
+data/processed/
+
+# Frontend (added in a later step)
+node_modules/
+dist/
+.angular/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

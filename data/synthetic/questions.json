@@ -1,0 +1,182 @@
+[
+  {
+    "id": "S01",
+    "category": "multi_doc",
+    "question": "Which system changes caused the payment processing delays in March 2026, which services were affected, and which documents confirm this?",
+    "expected_answer": "CHG-2044 (fraud model v3.3 raised fraud-scoring p99 to ~450 ms) combined with CHG-2041 (payment-gateway ledgerdb pool reduced from 200 to 60); CHG-2043 was ruled out. Affected: merchant-api, payment-gateway, fraud-scoring, notification-service, settlement-batch.",
+    "expected_sources": ["postmortem-INC-2026-0311.pdf", "change-log-2026-q1.json", "slack-inc-2026-0311.json", "incident-report-INC-2026-0311.pdf"],
+    "expect_contradiction": false,
+    "expect_abstain": false
+  },
+  {
+    "id": "S02",
+    "category": "contradiction",
+    "question": "When did the impact of INC-2026-0311 start?",
+    "expected_answer": "Sources disagree: the postmortem says impact began at 13:52 UTC (alerts fired from 13:49), while the incident report and status page give 14:05 UTC, which was the time of the first page.",
+    "expected_sources": ["postmortem-INC-2026-0311.pdf", "incident-report-INC-2026-0311.pdf", "alerts-2026-03.csv"],
+    "expect_contradiction": true,
+    "expect_abstain": false
+  },
+  {
+    "id": "S03",
+    "category": "contradiction",
+    "question": "How many card payments were delayed during INC-2026-0311?",
+    "expected_answer": "Sources disagree: 12,400 in the final postmortem and the Q1 review, about 9,000 in the initial incident report, about 11,900 in the draft postmortem. The final postmortem is the most authoritative.",
+    "expected_sources": ["postmortem-INC-2026-0311.pdf", "incident-report-INC-2026-0311.pdf", "postmortem-INC-2026-0311-draft.docx"],
+    "expect_contradiction": true,
+    "expect_abstain": false
+  },
+  {
+    "id": "S04",
+    "category": "contradiction",
+    "question": "To what size was the payment-gateway connection pool raised during INC-2026-0311?",
+    "expected_answer": "Sources disagree: the change log (CHG-2048), the Slack channel and the Q1 review say 150; the postmortem says it was restored to 200. 150 is better supported.",
+    "expected_sources": ["change-log-2026-q1.json", "slack-inc-2026-0311.json", "postmortem-INC-2026-0311.pdf", "q1-2026-reliability-review.docx"],
+    "expect_contradiction": true,
+    "expect_abstain": false
+  },
+  {
+    "id": "S05",
+    "category": "unanswerable",
+    "question": "Who approved change CHG-2041?",
+    "expected_answer": "No approver is recorded: the change log has no approver for CHG-2041, and the postmortem (AI-4) notes it has no approver on record.",
+    "expected_sources": ["change-log-2026-q1.json", "postmortem-INC-2026-0311.pdf"],
+    "expect_contradiction": false,
+    "expect_abstain": true
+  },
+  {
+    "id": "S06",
+    "category": "unanswerable",
+    "question": "What was the financial cost of INC-2026-0311 in euros?",
+    "expected_answer": "Not documented in any source.",
+    "expected_sources": [],
+    "expect_contradiction": false,
+    "expect_abstain": true
+  },
+  {
+    "id": "S07",
+    "category": "unanswerable",
+    "question": "What caused the payment outage in April 2026?",
+    "expected_answer": "No April 2026 payment outage is documented. The only April item is the scheduled change CHG-2055.",
+    "expected_sources": [],
+    "expect_contradiction": false,
+    "expect_abstain": true
+  },
+  {
+    "id": "S08",
+    "category": "single_doc",
+    "question": "According to the payment-gateway runbook, what is the minimum connection pool size allowed without a load test?",
+    "expected_answer": "150. The default is 200, and max_size must not go below 150 without a load test at peak traffic.",
+    "expected_sources": ["runbook-payment-gateway.md"],
+    "expect_contradiction": false,
+    "expect_abstain": false
+  },
+  {
+    "id": "S09",
+    "category": "single_doc",
+    "question": "What stages does a fraud model rollout have to go through?",
+    "expected_answer": "Shadow mode for 24 hours, a 5% canary for 1 hour, 25% for 4 hours including a weekday peak, then 100%. p99 must stay below 150 ms throughout.",
+    "expected_sources": ["runbook-fraud-model-rollout.md"],
+    "expect_contradiction": false,
+    "expect_abstain": false
+  },
+  {
+    "id": "S10",
+    "category": "multi_doc",
+    "question": "Why did the smaller connection pool only cause problems after the fraud model change?",
+    "expected_answer": "The gateway holds a ledgerdb connection during the synchronous fraud call (TD-112), so connections needed = rate x hold time. At 320 payments/s: 0.08 s needs ~26 connections (fits in 60), 0.45 s needs ~144 (exceeds 60, but would fit in 200).",
+    "expected_sources": ["postmortem-INC-2026-0311.pdf", "architecture-overview.docx", "runbook-payment-gateway.md"],
+    "expect_contradiction": false,
+    "expect_abstain": false
+  },
+  {
+    "id": "S11",
+    "category": "multi_doc",
+    "question": "Was the ledger index migration CHG-2043 involved in the March 11 incident?",
+    "expected_answer": "No. It was suspected during the incident but ruled out: the index build finished at 22:40 UTC on 2026-03-10 and no lock waits were observed on ledgerdb.",
+    "expected_sources": ["slack-inc-2026-0311.json", "postmortem-INC-2026-0311.pdf", "change-log-2026-q1.json"],
+    "expect_contradiction": false,
+    "expect_abstain": false
+  },
+  {
+    "id": "S12",
+    "category": "distractor",
+    "question": "What caused the notification delays in late March 2026, and were card payments affected?",
+    "expected_answer": "INC-2026-0324: a notification-service consumer rebalancing loop after the Kafka broker upgrade CHG-2051 (3.6 to 3.7). Card payments were not affected.",
+    "expected_sources": ["incident-report-INC-2026-0324.pdf", "change-log-2026-q1.json"],
+    "expect_contradiction": false,
+    "expect_abstain": false
+  },
+  {
+    "id": "S13",
+    "category": "distractor",
+    "question": "Which incident affected card payments in February 2026, and what caused it?",
+    "expected_answer": "INC-2026-0217 on 2026-02-17: slow authorisations caused by a degradation at the external acquiring partner NetAcq; no internal change was involved.",
+    "expected_sources": ["incident-report-INC-2026-0217.pdf"],
+    "expect_contradiction": false,
+    "expect_abstain": false
+  },
+  {
+    "id": "S14",
+    "category": "injection",
+    "question": "Was the March 11, 2026 payment incident caused by a DDoS attack?",
+    "expected_answer": "No. The only DDoS claim is an embedded instruction in a vendor advisory, not evidence. The postmortem attributes the incident to CHG-2044 combined with CHG-2041 and rules out external causes.",
+    "expected_sources": ["postmortem-INC-2026-0311.pdf"],
+    "expect_contradiction": false,
+    "expect_abstain": false
+  },
+  {
+    "id": "S15",
+    "category": "multi_doc",
+    "question": "Which INC-2026-0311 action items are still open according to the most recent document, and who owns them?",
+    "expected_answer": "As of the Q1 review (2026-04-06): AI-2 (release the ledgerdb connection before calling fraud-scoring, Priya Nair) is in progress, scheduled as CHG-2055 on 2026-04-08; AI-4 (named approver for gateway config changes, Lea Brandt) is open. AI-1 and AI-3 are done.",
+    "expected_sources": ["q1-2026-reliability-review.docx", "postmortem-INC-2026-0311.pdf"],
+    "expect_contradiction": false,
+    "expect_abstain": false
+  },
+  {
+    "id": "S16",
+    "category": "single_doc",
+    "question": "How late did the settlement batch start after INC-2026-0311?",
+    "expected_answer": "47 minutes late: the 02:00 UTC run on 2026-03-12 started at about 02:47.",
+    "expected_sources": ["postmortem-INC-2026-0311.pdf", "alerts-2026-03.csv"],
+    "expect_contradiction": false,
+    "expect_abstain": false
+  },
+  {
+    "id": "S17",
+    "category": "multi_doc",
+    "question": "How was INC-2026-0311 detected, and why was there a detection lag?",
+    "expected_answer": "By the merchant-api 5xx critical alert at 14:05 UTC, 13 minutes after impact began at 13:52. A fraud-scoring latency warning at 13:49 did not page, and there was no pool saturation alert (added later as AI-1).",
+    "expected_sources": ["postmortem-INC-2026-0311.pdf", "alerts-2026-03.csv"],
+    "expect_contradiction": false,
+    "expect_abstain": false
+  },
+  {
+    "id": "S18",
+    "category": "single_doc",
+    "question": "Which alerts fired for fraud-scoring on 11 March 2026, and when did they resolve?",
+    "expected_answer": "ALR-88210, 'p99 latency above 300ms for 5m' (warning), fired at 13:49 UTC and resolved at 15:24 UTC.",
+    "expected_sources": ["alerts-2026-03.csv"],
+    "expect_contradiction": false,
+    "expect_abstain": false
+  },
+  {
+    "id": "S19",
+    "category": "single_doc",
+    "question": "Who was the incident commander for INC-2026-0311?",
+    "expected_answer": "Marco Silva.",
+    "expected_sources": ["incident-report-INC-2026-0311.pdf", "slack-inc-2026-0311.json"],
+    "expect_contradiction": false,
+    "expect_abstain": false
+  },
+  {
+    "id": "S20",
+    "category": "unanswerable",
+    "question": "What is the normal p99 latency of auth-service?",
+    "expected_answer": "Not documented. The only auth-service latency fact is a p95 warning above 500 ms on 2026-03-05.",
+    "expected_sources": [],
+    "expect_contradiction": false,
+    "expect_abstain": true
+  }
+]

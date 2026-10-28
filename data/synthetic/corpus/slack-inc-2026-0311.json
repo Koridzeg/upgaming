@@ -1,0 +1,19 @@
+{
+  "channel": "#inc-2026-0311",
+  "exported_at": "2026-03-12T09:00:00Z",
+  "messages": [
+    {"ts": "2026-03-11T14:05:12Z", "user": "pagerbot", "text": "[CRITICAL] merchant-api 5xx rate 4.2% (threshold 2%)"},
+    {"ts": "2026-03-11T14:07:40Z", "user": "Marco Silva", "text": "IC here. Checkout requests are timing out after 30s. Who is on payment-gateway?"},
+    {"ts": "2026-03-11T14:09:02Z", "user": "Priya Nair", "text": "on it. gateway p95 is 11s, threads are blocked waiting for a db connection from the pool"},
+    {"ts": "2026-03-11T14:12:55Z", "user": "Tomasz Wójcik", "text": "we ran the ledger index migration last night (CHG-2043), could this be lock contention on ledgerdb?"},
+    {"ts": "2026-03-11T14:31:18Z", "user": "Tomasz Wójcik", "text": "checked pg_locks and pg_stat_activity on ledgerdb: no lock waits, and the index build finished at 22:40 yesterday. ruling out CHG-2043"},
+    {"ts": "2026-03-11T14:40:03Z", "user": "Priya Nair", "text": "pool is pinned at 60/60. that's the size we set in CHG-2041 on Monday"},
+    {"ts": "2026-03-11T14:48:27Z", "user": "Daniel Okafor", "text": "fraud-scoring p99 jumped to ~450ms around 13:50. v3.3 went to 100% at 09:30 but the afternoon peak is when it hurts"},
+    {"ts": "2026-03-11T15:02:11Z", "user": "Marco Silva", "text": "decision: roll back the fraud model to v3.2 first, then raise the gateway pool"},
+    {"ts": "2026-03-11T15:20:45Z", "user": "Daniel Okafor", "text": "rollback to v3.2 complete (CHG-2047). p99 back to 85ms"},
+    {"ts": "2026-03-11T15:31:09Z", "user": "pagerbot", "text": "[RESOLVED] merchant-api 5xx rate 0.3%"},
+    {"ts": "2026-03-11T16:35:30Z", "user": "Priya Nair", "text": "pool raised to 150 (CHG-2048), not 200: the new ledgerdb instance only has 200 max_connections and ledger-service needs headroom"},
+    {"ts": "2026-03-11T16:40:02Z", "user": "Marco Silva", "text": "all metrics normal. resolving INC-2026-0311. postmortem owner: Priya"},
+    {"ts": "2026-03-11T16:52:37Z", "user": "Samir Haddad", "text": "FYI notification-service has a backlog of ~30k receipt events from the incident, draining now, ETA 1-2h"}
+  ]
+}
