@@ -84,6 +84,17 @@ python -m investigator.retrieval "pool size during INC-2026-0311" --mode keyword
 python -m investigator.retrieval --refresh-stats   # recompute BM25 term statistics
 ```
 
+## Retrieval evaluation
+
+```bash
+python -m investigator.evaluation.retrieval   # ~1 minute; writes eval/retrieval_report.md
+```
+
+300 HotpotQA questions (seeded, stratified, 150 to tune settings on and 150 to report on;
+the ids are fixed in `eval/retrieval_sample.json`) plus the answerable synthetic questions.
+Metrics: recall@K, all@K (every gold document found), MRR, nDCG@10, sentence recall@10,
+with paired-bootstrap confidence intervals. See [eval/retrieval_report.md](eval/retrieval_report.md).
+
 ## Ingesting files
 
 ```bash

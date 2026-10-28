@@ -9,7 +9,7 @@ score), so a result can always be explained - in the UI and in the evaluation.
 """
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal
 from uuid import UUID
 
@@ -34,8 +34,10 @@ class SearchConfig:
     keyword_weight: float = 1.0
     rrf_k: int = RRF_K
     rerank: bool = True
-    title_boost: float = 0.3  # added to the normalised fused score x title match share
-    mmr_lambda: float = 0.8  # 1.0 = no diversity
+    # Both chosen by the Step 7 evaluation (tune split, all@10): a title boost of 0.6 and no
+    # MMR diversity. MMR (lambda < 1) never improved all@10 on HotpotQA; it stays available.
+    title_boost: float = 0.6  # added to the normalised fused score when the title is named
+    mmr_lambda: float = 1.0  # 1.0 = plain ranking, lower = more diversity
     source_types: list[str] | None = None  # e.g. ["upload", "synthetic"]; None = everything
 
 
@@ -48,6 +50,7 @@ class SearchHit:
     title: str
     context: str
     text: str
+    token_count: int
     chunk_metadata: dict
     document_metadata: dict
     scores: dict = field(default_factory=dict)
@@ -58,38 +61,83 @@ async def search(
     conn: asyncpg.Connection, embedder: Embedder, query: str, config: SearchConfig | None = None
 ) -> list[SearchHit]:
     config = config or SearchConfig()
-    rankings: dict[str, list[int]] = {}
-    raw: dict[str, dict[int, float]] = {}
+    candidates = await retrieve(conn, embedder, query, config)
+    hits = await fetch_hits(conn, candidates.chunk_ids())
+    return rank(candidates, hits, query, config)
 
-    if config.mode in ("hybrid", "dense"):
+
+@dataclass
+class Candidates:
+    """What the retrievers returned, before any fusion: chunk ids best-first, and raw scores."""
+
+    rankings: dict[str, list[int]] = field(default_factory=dict)
+    scores: dict[str, dict[int, float]] = field(default_factory=dict)
+
+    def chunk_ids(self) -> list[int]:
+        return list(dict.fromkeys(i for ranked in self.rankings.values() for i in ranked))
+
+
+_RETRIEVERS: dict[str, set[str]] = {
+    "hybrid": {"dense", "keyword"},
+    "dense": {"dense"},
+    "keyword": {"keyword"},
+}
+
+
+async def retrieve(
+    conn: asyncpg.Connection, embedder: Embedder, query: str, config: SearchConfig
+) -> Candidates:
+    """The database half of a search: run the retrievers the mode needs."""
+    candidates = Candidates()
+    if "dense" in _RETRIEVERS[config.mode]:
         # Embedding is CPU work: run it in a thread so the event loop keeps serving requests.
         vector = await asyncio.to_thread(embedder.embed_query, query)
         dense = await dense_search(
             conn, vector, config.strategy, config.candidates, config.source_types
         )
-        rankings["dense"], raw["dense"] = [i for i, _ in dense], dict(dense)
-    if config.mode in ("hybrid", "keyword"):
+        candidates.rankings["dense"] = [i for i, _ in dense]
+        candidates.scores["dense"] = dict(dense)
+    if "keyword" in _RETRIEVERS[config.mode]:
         keyword = await keyword_search(
             conn, query, config.strategy, config.candidates, config.source_types
         )
-        rankings["keyword"], raw["keyword"] = [i for i, _ in keyword], dict(keyword)
+        candidates.rankings["keyword"] = [i for i, _ in keyword]
+        candidates.scores["keyword"] = dict(keyword)
+    return candidates
 
+
+def rank(
+    candidates: Candidates, hits: dict[int, SearchHit], query: str, config: SearchConfig
+) -> list[SearchHit]:
+    """The pure half of a search: fusion and re-ranking. No database, no model.
+
+    Separate so the evaluation can retrieve once per question and then try many settings.
+    Returns new SearchHit objects; `hits` is left untouched.
+    """
+    rankings = {
+        name: ranked
+        for name, ranked in candidates.rankings.items()
+        if name in _RETRIEVERS[config.mode]
+    }
     fused = weighted_rrf(
         rankings,
         {"dense": config.dense_weight, "keyword": config.keyword_weight},
         k=config.rrf_k,
     )
     top = sorted(fused, key=fused.__getitem__, reverse=True)[: config.candidates]
-    hits = await _fetch(conn, top)
 
-    for hit in hits:
+    ranked_hits = []
+    for chunk_id in top:
+        scores = {"fused": round(fused[chunk_id], 5)}
         for name, ranked in rankings.items():
-            if hit.chunk_id in raw[name]:
-                hit.scores[f"{name}_rank"] = ranked.index(hit.chunk_id) + 1
-                hit.scores[f"{name}_score"] = round(raw[name][hit.chunk_id], 4)
-        hit.scores["fused"] = round(fused[hit.chunk_id], 5)
+            if chunk_id in candidates.scores[name]:
+                scores[f"{name}_rank"] = ranked.index(chunk_id) + 1
+                scores[f"{name}_score"] = round(candidates.scores[name][chunk_id], 4)
+        ranked_hits.append(replace(hits[chunk_id], scores=scores))
 
-    return _rerank(hits, query, config) if config.rerank else _truncate(hits, config.k)
+    if config.rerank:
+        return _rerank(ranked_hits, query, config)
+    return _truncate(ranked_hits, config.k)
 
 
 def _rerank(hits: list[SearchHit], query: str, config: SearchConfig) -> list[SearchHit]:
@@ -116,22 +164,21 @@ def _truncate(hits: list[SearchHit], k: int) -> list[SearchHit]:
     return hits[:k]
 
 
-async def _fetch(conn: asyncpg.Connection, chunk_ids: list[int]) -> list[SearchHit]:
-    """Load the chunks and their documents, in the order of `chunk_ids`."""
+async def fetch_hits(conn: asyncpg.Connection, chunk_ids: list[int]) -> dict[int, SearchHit]:
+    """Load chunks with their documents' title and metadata, keyed by chunk id."""
     rows = await conn.fetch(
         """
         SELECT c.id, c.document_id, d.source_id, d.source_type, d.title, c.context, c.text,
-               c.metadata AS chunk_metadata, c.embedding,
+               c.token_count, c.metadata AS chunk_metadata, c.embedding,
                d.metadata - 'sentence_spans' - 'near_duplicates' AS document_metadata
-          FROM unnest($1::bigint[]) WITH ORDINALITY AS wanted(id, position)
-          JOIN chunks c ON c.id = wanted.id
+          FROM chunks c
           JOIN documents d ON d.id = c.document_id
-         ORDER BY wanted.position
+         WHERE c.id = ANY($1::bigint[])
         """,
         chunk_ids,
     )
-    return [
-        SearchHit(
+    return {
+        row["id"]: SearchHit(
             chunk_id=row["id"],
             document_id=row["document_id"],
             source_id=row["source_id"],
@@ -139,9 +186,10 @@ async def _fetch(conn: asyncpg.Connection, chunk_ids: list[int]) -> list[SearchH
             title=row["title"],
             context=row["context"],
             text=row["text"],
+            token_count=row["token_count"],
             chunk_metadata=row["chunk_metadata"],
             document_metadata=row["document_metadata"],
             embedding=np.asarray(row["embedding"].to_numpy(), dtype=np.float32),
         )
         for row in rows
-    ]
+    }
