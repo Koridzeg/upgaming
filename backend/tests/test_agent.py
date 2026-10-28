@@ -69,6 +69,12 @@ class ScriptedLLM:
             raise response
         return response
 
+    def usage(self) -> dict:
+        return {}
+
+    async def aclose(self) -> None:
+        pass
+
 
 def run(
     llm, retriever, question="Which team does the 2015 Diamond Head Classic MVP play for?", **kw
@@ -101,6 +107,21 @@ def test_second_hop_uses_what_the_first_search_revealed():
     # the evidence reached the model as a delimited block with its id
     second_turn = llm.calls[1]["messages"]
     assert '<evidence id="E1"' in second_turn[-1].content
+
+
+def test_single_shot_baseline_searches_once_with_the_question_itself():
+    question = "Which team does the 2015 Diamond Head Classic MVP play for?"
+    llm = ScriptedLLM(
+        reply(call("final_answer", {"answer": "The MVP was Hield [E1].", "status": "partial"}))
+    )
+    retriever = FakeRetriever({"Diamond Head": [MVP], "Buddy Hield": [TEAM]})
+
+    _, result = run(llm, retriever, question, single_shot=True, verify=False)
+
+    assert retriever.queries == [question]  # no follow-up: it never looks up Buddy Hield
+    assert len(llm.calls) == 1 and llm.calls[0]["tool_choice"] == "required"
+    assert result["evidence_sources"] == ["test:2015 Diamond Head Classic"]
+    assert result["status"] == "partial"
 
 
 def test_citations_to_evidence_never_shown_are_removed():

@@ -1,0 +1,91 @@
+<div class="toolbar">
+  <form class="filters" (ngSubmit)="load(0)">
+    <input name="query" [(ngModel)]="query" placeholder="Filter by title…" />
+    <select name="sourceType" [(ngModel)]="sourceType" (ngModelChange)="load(0)">
+      @for (type of sourceTypes; track type.value) {
+        <option [value]="type.value">{{ type.label }}</option>
+      }
+    </select>
+    <button type="submit" class="secondary">Filter</button>
+  </form>
+  <label class="button" [class.disabled]="busy()">
+    Upload document
+    <input #file type="file" hidden [disabled]="busy()" (change)="upload(file)"
+           accept=".pdf,.docx,.html,.htm,.md,.markdown,.txt,.csv,.json,.jsonl" />
+  </label>
+</div>
+<p class="muted hint">
+  PDF, Word, HTML, Markdown, text, CSV, JSON and JSONL. Uploading a file with the same name again creates a new
+  version; identical content is detected and not stored twice.
+</p>
+
+@if (message(); as m) {
+  <div class="card" [class.error]="m.error">{{ m.text }}</div>
+}
+
+<div class="layout" [class.with-detail]="detail()">
+  <section class="card">
+    <table>
+      <thead>
+        <tr><th>Title</th><th>Format</th><th>Version</th><th>Chunks</th><th>Updated</th><th></th></tr>
+      </thead>
+      <tbody>
+        @for (doc of documents(); track doc.id) {
+          <tr [class.selected]="detail()?.id === doc.id">
+            <td><button type="button" class="link" (click)="open(doc)">{{ doc.title }}</button></td>
+            <td><span class="tag">{{ doc.file_format }}</span></td>
+            <td>v{{ doc.version }}</td>
+            <td>{{ doc.chunks }}</td>
+            <td class="muted">{{ doc.updated_at | date: 'MMM d, HH:mm' }}</td>
+            <td class="actions">
+              <label class="link" [class.disabled]="busy()">
+                Replace
+                <input #replacement type="file" hidden [disabled]="busy()" (change)="replace(doc, replacement)" />
+              </label>
+              <button type="button" class="link danger" (click)="remove(doc)">Delete</button>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="6" class="muted">No documents match.</td></tr>
+        }
+      </tbody>
+    </table>
+    <div class="pager">
+      <span class="muted">
+        {{ total() ? offset() + 1 : 0 }}–{{ offset() + documents().length }} of {{ total() | number }}
+      </span>
+      <button type="button" class="secondary" [disabled]="offset() === 0" (click)="load(offset() - pageSize)">Previous</button>
+      <button type="button" class="secondary" [disabled]="offset() + pageSize >= total()" (click)="load(offset() + pageSize)">Next</button>
+    </div>
+  </section>
+
+  @if (detail(); as d) {
+    <aside class="card detail">
+      <div class="detail-head">
+        <h3>{{ d.title }}</h3>
+        <button type="button" class="link" (click)="detail.set(null)">Close</button>
+      </div>
+      <div class="muted">{{ d.source_id }} · {{ d.file_format }} · {{ d.chunks }} chunks · version {{ d.version }}</div>
+
+      @if (d.versions.length) {
+        <h4>Earlier versions</h4>
+        <ul>
+          @for (v of d.versions; track v.version) {
+            <li>v{{ v.version }} “{{ v.title }}” — replaced {{ v.replaced_at | date: 'MMM d, HH:mm' }}</li>
+          }
+        </ul>
+      }
+
+      <details>
+        <summary>Metadata</summary>
+        <pre>{{ d.metadata | json }}</pre>
+      </details>
+
+      <h4>Content</h4>
+      <pre class="content">{{ d.content }}</pre>
+      @if (d.content_truncated) {
+        <div class="muted">Showing the first 20,000 characters.</div>
+      }
+    </aside>
+  }
+</div>

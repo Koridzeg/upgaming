@@ -1,0 +1,21 @@
+.toolbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.hint { font-size: 13px; margin: 8px 0 16px; }
+
+.layout { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+.layout.with-detail { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+@media (max-width: 860px) { .layout.with-detail { grid-template-columns: 1fr; } }
+
+.card { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: 13px; color: var(--muted); font-weight: 600; }
+tr.selected { background: var(--accent-soft); }
+.actions { white-space: nowrap; display: flex; gap: 12px; }
+
+.pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 12px; }
+
+.detail-head { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+.detail-head h3 { margin: 0; }
+.detail pre { white-space: pre-wrap; font-size: 13px; background: var(--bg); padding: 12px; border-radius: 6px; }
+.content { max-height: 60vh; overflow: auto; font-family: inherit; }

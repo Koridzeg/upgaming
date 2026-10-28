@@ -34,6 +34,7 @@ class EvalQuestion:
     split: str  # 'tune' or 'test'
     gold: set[str]  # source_ids of the documents the question needs
     gold_sentences: list[tuple[str, int]] = field(default_factory=list)  # (source_id, index)
+    answer: str = ""  # the reference answer
 
 
 def hotpotqa_questions(per_split: int = 150) -> list[EvalQuestion]:
@@ -74,6 +75,7 @@ def hotpotqa_questions(per_split: int = 150) -> list[EvalQuestion]:
                     gold_sentences=[
                         (source(f["title"]), f["sent_id"]) for f in record["supporting_facts"]
                     ],
+                    answer=record["answer"],
                 )
             )
     return questions

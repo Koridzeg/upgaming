@@ -85,6 +85,10 @@ class EvidenceRegistry:
     def __len__(self) -> int:
         return len(self._by_id)
 
+    def sources(self) -> list[str]:
+        """Every document the model was shown, in the order first seen."""
+        return list(dict.fromkeys(e.hit.source_id for e in self._by_id.values()))
+
     def add(self, hits: list[SearchHit]) -> tuple[list[Evidence], list[Evidence]]:
         """Register hits; returns (new evidence, evidence already shown earlier)."""
         new, seen = [], []

@@ -1,0 +1,57 @@
+<form class="search" (ngSubmit)="run()">
+  <input name="query" [(ngModel)]="query" placeholder="Search passages…" class="grow" />
+  <select name="mode" [(ngModel)]="mode">
+    @for (m of modes; track m.value) {
+      <option [value]="m.value">{{ m.label }}</option>
+    }
+  </select>
+  <select name="sourceType" [(ngModel)]="sourceType">
+    @for (type of sourceTypes; track type.value) {
+      <option [value]="type.value">{{ type.label }}</option>
+    }
+  </select>
+  <select name="k" [(ngModel)]="k">
+    @for (n of [5, 10, 20]; track n) {
+      <option [ngValue]="n">top {{ n }}</option>
+    }
+  </select>
+  <button type="submit" [disabled]="!query.trim()">Search</button>
+</form>
+
+@if (error(); as message) {
+  <div class="card error">{{ message }}</div>
+}
+
+@if (hits(); as results) {
+  <p class="muted">{{ results.length }} passages in {{ elapsed() | number: '1.0-0' }} ms (including the network)</p>
+  @for (hit of results; track hit.chunk_id) {
+    <article class="card hit">
+      <div class="hit-head">
+        <span class="rank">#{{ hit.scores['final_rank'] }}</span>
+        <b>{{ hit.title }}</b>
+        <span class="muted">{{ hit.context }}</span>
+      </div>
+      <p class="text">{{ hit.text }}</p>
+      <div class="scores">
+        @if (hit.scores['dense_rank']) {
+          <span class="tag">dense #{{ hit.scores['dense_rank'] }} · cos {{ hit.scores['dense_score'] | number: '1.3-3' }}</span>
+        }
+        @if (hit.scores['keyword_rank']) {
+          <span class="tag">BM25 #{{ hit.scores['keyword_rank'] }} · {{ hit.scores['keyword_score'] | number: '1.2-2' }}</span>
+        }
+        @if (hit.scores['fused'] !== undefined) {
+          <span class="tag">RRF {{ hit.scores['fused'] | number: '1.4-4' }}</span>
+        }
+        @if (hit.scores['title_match']) {
+          <span class="tag good">title named in query</span>
+        }
+        @if (hit.scores['relevance'] !== undefined) {
+          <span class="tag">relevance {{ hit.scores['relevance'] | number: '1.3-3' }}</span>
+        }
+        <span class="tag">{{ hit.token_count }} tokens</span>
+      </div>
+    </article>
+  } @empty {
+    <div class="card muted">No passages found.</div>
+  }
+}

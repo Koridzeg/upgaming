@@ -21,6 +21,8 @@ dependencies = [
     "onnxruntime>=1.20",
     # LLM API calls (also what FastAPI's TestClient uses)
     "httpx2>=2.16",
+    # File uploads (multipart/form-data)
+    "python-multipart>=0.0.12",
 ]
 
 [project.optional-dependencies]
@@ -51,3 +53,7 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency injection is declared through these calls in parameter defaults.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]

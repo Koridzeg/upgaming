@@ -1,0 +1,190 @@
+<form class="ask" (ngSubmit)="run()">
+  <textarea
+    name="question"
+    [(ngModel)]="question"
+    rows="2"
+    placeholder="Ask a question about the documents…"
+    (keydown.enter)="$event.preventDefault(); run()"
+  ></textarea>
+  <div class="row">
+    <select name="sourceType" [(ngModel)]="sourceType">
+      @for (type of sourceTypes; track type.value) {
+        <option [value]="type.value">{{ type.label }}</option>
+      }
+    </select>
+    @if (running()) {
+      <button type="button" class="secondary" (click)="stop()">Stop</button>
+    } @else {
+      <button type="submit" [disabled]="question.trim().length < 3">Investigate</button>
+    }
+  </div>
+</form>
+
+<div class="examples">
+  <span class="muted">Try:</span>
+  @for (example of examples; track example.label) {
+    <button type="button" class="chip" [disabled]="running()" (click)="useExample(example)" [title]="example.question">
+      {{ example.label }}
+    </button>
+  }
+</div>
+
+@if (error(); as message) {
+  <div class="card error">{{ message }}</div>
+}
+
+@if (steps().length || running()) {
+  <section class="card steps">
+    <h3>Investigation steps</h3>
+    <ol>
+      @for (step of steps(); track $index) {
+        <li [class]="step.type">
+          @switch (step.type) {
+            @case ('search') {
+              <b>Searched</b> “{{ step.data.query }}” — {{ step.data.found.length }} new passages
+              @if (step.data.repeated.length) {
+                <span class="muted">({{ step.data.repeated.length }} already seen)</span>
+              }
+              <div class="found">
+                @for (found of step.data.found; track found.id) {
+                  <span class="tag" [class.warn]="found.suspicious">{{ found.id }} · {{ found.title }}</span>
+                }
+              </div>
+            }
+            @case ('read_more') {
+              <b>Read around</b> {{ step.data.evidence_id }} — {{ step.data.found.length }} neighbouring passages
+            }
+            @case ('tool_error') {
+              <b>Tool call rejected</b> ({{ step.data.tool }}): {{ step.data.error }}
+            }
+            @case ('warning') {
+              <b>Warning:</b> {{ step.data.message }}
+            }
+            @case ('verification') {
+              <b>Verified</b> {{ step.data.claims.length }} claims against their cited evidence
+            }
+            @case ('error') {
+              <b>Failed:</b> {{ step.data.message }}
+            }
+          }
+        </li>
+      }
+      @if (running()) {
+        <li class="pending">Working…</li>
+      }
+    </ol>
+  </section>
+}
+
+@if (result(); as r) {
+  <div class="layout">
+    <section class="card answer">
+      <div class="answer-head">
+        <h3>Answer</h3>
+        <span class="status" [class]="r.status">{{ r.status.replace('_', ' ') }}</span>
+      </div>
+      <p class="answer-text">
+        @for (part of answerParts(); track $index) {
+          @if (part.citation) {
+            <button
+              type="button"
+              class="cite"
+              [class.active]="selected() === part.citation"
+              [class.unknown]="!citations().has(part.citation)"
+              (click)="selected.set(part.citation)"
+            >{{ part.citation }}</button>
+          } @else {
+            {{ part.text }}
+          }
+        }
+      </p>
+
+      @if (r.missing) {
+        <div class="note">
+          <b>Not found in the documents:</b> {{ r.missing }}
+        </div>
+      }
+
+      @for (contradiction of r.contradictions; track $index) {
+        <div class="contradiction">
+          <b>Sources disagree: {{ contradiction.topic }}</b>
+          <ul>
+            @for (position of contradiction.positions; track $index) {
+              <li>
+                {{ position.claim }}
+                @for (id of position.evidence; track id) {
+                  <button type="button" class="cite" (click)="selected.set(id)">{{ id }}</button>
+                }
+              </li>
+            }
+          </ul>
+          @if (contradiction.assessment) {
+            <div class="muted">{{ contradiction.assessment }}</div>
+          }
+        </div>
+      }
+
+      @if (r.verification.length) {
+        <details class="verification">
+          <summary>Claim verification ({{ r.verification.length }})</summary>
+          <ul>
+            @for (claim of r.verification; track $index) {
+              <li>
+                <span class="verdict" [class]="claim.verdict">{{ claim.verdict }}</span>
+                {{ claim.claim }}
+                <div class="muted">{{ claim.reason }}</div>
+              </li>
+            }
+          </ul>
+        </details>
+      }
+
+      @for (warning of r.warnings; track $index) {
+        <div class="note warn">{{ warning }}</div>
+      }
+
+      <div class="usage muted">
+        {{ r.searches.length }} searches · {{ r.evidence_seen }} passages read from
+        {{ r.evidence_sources.length }} documents · {{ r.llm_calls }} LLM calls ·
+        {{ r.prompt_tokens + r.completion_tokens | number }} tokens ·
+        {{ r.duration_ms / 1000 | number: '1.1-1' }} s · {{ r.models.join(', ') }}
+      </div>
+    </section>
+
+    <aside class="card sources">
+      <h3>Sources</h3>
+      @if (selectedCitation(); as c) {
+        <button type="button" class="link" (click)="selected.set(null)">← all sources</button>
+        <div class="source-head">
+          <b>{{ c.id }} · {{ c.title }}</b>
+          <div class="muted">
+            {{ c.section }}
+            @if (c.pages) { · page {{ c.pages.join(', ') }} }
+            @if (c.status) { · <span class="tag">{{ c.status }}</span> }
+            @if (c.date) { · {{ c.date }} }
+          </div>
+          @if (c.suspicious) {
+            <div class="note warn">This passage contains text that tries to instruct an AI. It was treated as data, not instructions.</div>
+          }
+        </div>
+        <pre class="passage">{{ c.text }}</pre>
+      } @else if (selected()) {
+        <div class="note warn">{{ selected() }} is not one of the evidence passages; the model cited it wrongly.</div>
+      } @else {
+        <ul class="source-list">
+          @for (c of r.citations; track c.id) {
+            <li>
+              <button type="button" class="cite" (click)="selected.set(c.id)">{{ c.id }}</button>
+              {{ c.title }}
+              <span class="muted">{{ c.section }}</span>
+              @if (c.status) { <span class="tag">{{ c.status }}</span> }
+              @if (c.suspicious) { <span class="tag warn">injection</span> }
+            </li>
+          } @empty {
+            <li class="muted">No citations.</li>
+          }
+        </ul>
+      }
+    </aside>
+  </div>
+}

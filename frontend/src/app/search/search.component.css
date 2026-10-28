@@ -1,0 +1,8 @@
+.search { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.grow { flex: 1 1 280px; }
+
+.hit { margin-bottom: 12px; }
+.hit-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.rank { color: var(--accent); font-weight: 700; }
+.text { white-space: pre-wrap; line-height: 1.55; margin: 8px 0; }
+.scores { display: flex; flex-wrap: wrap; gap: 4px; }

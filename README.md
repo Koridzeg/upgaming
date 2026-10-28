@@ -9,7 +9,7 @@ answer when the evidence is insufficient.
 
 ## Local development
 
-Prerequisites: Python 3.12+, Docker.
+Prerequisites: Python 3.12+, Node 20+, Docker.
 
 ```bash
 # 1. Start Postgres + pgvector (port 5433 on the host)
@@ -31,6 +31,11 @@ uvicorn investigator.main:app --reload
 
 # 5. Tests (need the database from step 1)
 pytest
+
+# 6. The web UI (from frontend/)
+npm install
+npx ng serve       # -> http://localhost:4200, /api is proxied to the backend on :8000
+npx ng build       # -> frontend/dist/; the backend then serves the UI itself at http://localhost:8000
 ```
 
 ## Data preparation
@@ -121,6 +126,45 @@ python -m investigator.llm --models   # model ids your keys can use
 python -m investigator.llm            # live tool-call round trip + streaming per provider
 ```
 
+## Answer evaluation
+
+```bash
+python -m investigator.evaluation.answers        # ~1 hour on the free tier; resumable
+python -m investigator.evaluation.answers --report-only
+```
+
+42 questions (`eval/answer_questions.json`): the 20 synthetic questions (multi-document,
+contradictions, unanswerable, decoys, prompt injection) and 22 HotpotQA multi-hop questions
+from the retrieval test split. Three configurations, each on a single model: the agent on
+gpt-oss-120b, a single-shot baseline (one search, one answer) on the same model, and the agent
+on gpt-oss-20b. A third model (qwen3.8-27b) judges correctness against reference answers.
+Results: [eval/answer_report.md](eval/answer_report.md).
+
+## Web UI and API
+
+One FastAPI process serves the API under `/api` and the built Angular app at `/` (any other
+path falls back to the app, so deep links and browser refreshes work).
+
+| Page | What it does |
+| --- | --- |
+| Investigate | Ask a question; each search the agent makes appears live, then the answer with clickable `[E#]` citations (the cited passage, its section, page, document status), contradictions, missing information, claim verification and token/latency usage |
+| Documents | List and filter, upload (add), replace (update to a new version), delete, view content, metadata and version history |
+| Search explorer | Retrieval alone, without the LLM: compare hybrid / dense / BM25 and see every score behind each rank |
+
+| Endpoint | |
+| --- | --- |
+| `GET /api/health` | Database round-trip, document count, LLM configured, embedding model matches the index (503 if the database is down) |
+| `GET /api/metrics` | Documents per source, chunks per strategy, LLM calls/failures/tokens/latency per model |
+| `GET /api/documents` · `GET /api/documents/{id}` | List (filter by source type and title, paged) · detail |
+| `POST /api/documents` · `PUT /api/documents/{id}` · `DELETE /api/documents/{id}` | Add · update (new version) · delete; max 10 MB, unsupported or broken files get a 422 with the reason |
+| `POST /api/search` | Hybrid / dense / keyword search with score breakdowns |
+| `POST /api/investigate` | Investigation, one JSON result |
+| `GET /api/investigate/stream?question=` | The same as server-sent events: `search`, `read_more`, `warning`, `verification`, then `final` |
+
+Investigations are rate-limited per client (3/minute, 25/day by default) because the demo runs
+on free LLM quotas; over the limit the API answers 429 with `Retry-After`. Closing the page
+cancels a running investigation, so no tokens are spent on an answer nobody reads.
+
 ## Ingesting files
 
 ```bash
@@ -142,6 +186,8 @@ backend/
   investigator/     Python package (API, ingestion, retrieval, agent, evaluation)
   migrations/       Numbered SQL migrations, applied in order on startup
   tests/
+frontend/           Angular UI (standalone components, signals)
+eval/               Evaluation question sets, raw results and reports
 docker/             Local Postgres init scripts
 docker-compose.yml  Local development database
 ```

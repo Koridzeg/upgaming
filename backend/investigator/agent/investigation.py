@@ -26,8 +26,10 @@ import asyncpg
 from investigator.agent.evidence import CITATION, EvidenceRegistry, normalize_citations
 from investigator.agent.prompts import (
     ANSWER_NOW,
+    FINAL_ANSWER,
     INVESTIGATOR_SYSTEM,
     NUDGE,
+    SINGLE_SHOT_SYSTEM,
     TOOLS,
     VERIFIER_SYSTEM,
 )
@@ -36,12 +38,14 @@ from investigator.llm.errors import LLMError
 from investigator.llm.types import LLMResponse, Message, ToolCall
 from investigator.retrieval.search import SearchConfig, SearchHit, fetch_neighbors, search
 
-# Budgets, sized for the free tiers measured in Step 9 (Groq: 8,000 tokens/min per model).
-# Every turn re-sends the whole conversation, so turns and context size are the cost drivers.
-MAX_TURNS = 6
-DEFAULT_K = 4
-PROMPT_BUDGET = 6000  # once a turn's prompt exceeds this, the next turn must answer
+# Budgets, sized for the measured free tier: Groq allows 8,000 tokens/min and 200,000
+# tokens/day per model, and an investigation averaged 10.8k tokens - 90% of them input,
+# because every turn re-sends the conversation. Turns and context size are the cost drivers.
+MAX_TURNS = 5
+DEFAULT_K = 3
+PROMPT_BUDGET = 4500  # once a turn's prompt exceeds this, the next turn must answer
 GRACE_TURNS = 2  # extra turns for a model that keeps searching after being told to answer
+SINGLE_SHOT_K = 10  # the baseline's one search: as many passages as the agent typically reads
 STATUSES = ("answered", "partial", "insufficient_evidence")
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 _EVIDENCE_ID = re.compile(r"E\d+")
@@ -89,6 +93,7 @@ class InvestigationResult:
     warnings: list[str] = field(default_factory=list)
     searches: list[str] = field(default_factory=list)
     evidence_seen: int = 0
+    evidence_sources: list[str] = field(default_factory=list)  # every document consulted
     llm_calls: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -98,10 +103,16 @@ class InvestigationResult:
 
 class Investigator:
     def __init__(
-        self, llm: LLM, retriever: Retriever, *, max_turns: int = MAX_TURNS, verify: bool = True
+        self,
+        llm: LLM,
+        retriever: Retriever,
+        *,
+        max_turns: int = MAX_TURNS,
+        verify: bool = True,
+        single_shot: bool = False,  # the evaluation baseline: one search, one answer
     ):
         self.llm, self.retriever = llm, retriever
-        self.max_turns, self.verify = max_turns, verify
+        self.max_turns, self.verify, self.single_shot = max_turns, verify, single_shot
 
     async def run(self, question: str) -> InvestigationResult:
         async for event in self.stream(question):
@@ -113,51 +124,14 @@ class Investigator:
         started = time.perf_counter()
         result = InvestigationResult(question=question, answer="", status="failed")
         registry = EvidenceRegistry()
-        messages = [Message("system", INVESTIGATOR_SYSTEM), Message("user", question)]
+        # Each mode stores its final_answer arguments here. Not on self: one Investigator
+        # serves concurrent API requests, so it must hold no per-request state.
+        outcome: dict = {}
         try:
-            final, must_answer, nudged, told_to_answer = None, False, False, False
-            for turn in range(self.max_turns + GRACE_TURNS):
-                # The last turn, or any turn after the context grew past budget, must answer.
-                # All tools stay offered: Groq rejects (400) a call to a tool that isn't in the
-                # request, and models do try to search once more (seen live). The instruction
-                # says "answer now", and a search on such a turn gets an error back instead.
-                answer_now = must_answer or turn >= self.max_turns - 1
-                if answer_now and not told_to_answer:
-                    messages.append(Message("user", ANSWER_NOW))
-                    told_to_answer = True
-                response = await self._complete(
-                    result,
-                    messages,
-                    tools=TOOLS,
-                    tool_choice="required" if answer_now else None,
-                )
-                messages.append(response.as_message())
-                must_answer = must_answer or response.usage.prompt_tokens > PROMPT_BUDGET
-                if not response.tool_calls:
-                    # Plain text (or nothing) instead of final_answer. Measured: the smaller
-                    # model did this, with no citations. Ask once for the structured form.
-                    if not nudged:
-                        nudged = must_answer = told_to_answer = True
-                        messages.append(Message("user", NUDGE))
-                        continue
-                    if response.content:
-                        final = {"answer": response.content, "status": "answered"}
-                        result.warnings.append("the model answered without calling final_answer")
-                        break
-                    continue
-                for call in response.tool_calls:
-                    if call.name == "final_answer" and call.arguments is not None:
-                        final = call.arguments
-                        break
-                    if answer_now and call.name != "final_answer":
-                        text, events = "Error: the search limit is reached. Call final_answer.", []
-                    else:
-                        text, events = await self._run_tool(call, registry, result)
-                    for event in events:
-                        yield event
-                    messages.append(Message("tool", text, tool_call_id=call.id))
-                if final is not None:
-                    break
+            mode = self._single_shot if self.single_shot else self._agent_loop
+            async for event in mode(question, registry, result, outcome):
+                yield event
+            final = outcome.get("final")
             if final is None:
                 result.warnings.append(f"no final answer after {self.max_turns} turns")
                 final = {"answer": "", "status": "insufficient_evidence",
@@ -177,8 +151,78 @@ class Investigator:
             result.warnings.append(str(exc))
             yield AgentEvent("error", {"message": str(exc)})
         result.evidence_seen = len(registry)
+        result.evidence_sources = registry.sources()
         result.duration_ms = round(1000 * (time.perf_counter() - started))
         yield AgentEvent("final", asdict(result))
+
+    async def _agent_loop(
+        self, question: str, registry: EvidenceRegistry, result: InvestigationResult, outcome: dict
+    ) -> AsyncIterator[AgentEvent]:
+        """The model searches in as many steps as it needs, then calls final_answer."""
+        messages = [Message("system", INVESTIGATOR_SYSTEM), Message("user", question)]
+        must_answer, nudged, told_to_answer = False, False, False
+        for turn in range(self.max_turns + GRACE_TURNS):
+            # The last turn, or any turn after the context grew past budget, must answer.
+            # All tools stay offered: Groq rejects (400) a call to a tool that isn't in the
+            # request, and models do try to search once more (seen live). The instruction
+            # says "answer now", and a search on such a turn gets an error back instead.
+            answer_now = must_answer or turn >= self.max_turns - 1
+            if answer_now and not told_to_answer:
+                messages.append(Message("user", ANSWER_NOW))
+                told_to_answer = True
+            response = await self._complete(
+                result, messages, tools=TOOLS, tool_choice="required" if answer_now else None
+            )
+            messages.append(response.as_message())
+            must_answer = must_answer or response.usage.prompt_tokens > PROMPT_BUDGET
+            if not response.tool_calls:
+                # Plain text (or nothing) instead of final_answer. Measured: the smaller
+                # model did this, with no citations. Ask once for the structured form.
+                if not nudged:
+                    nudged = must_answer = told_to_answer = True
+                    messages.append(Message("user", NUDGE))
+                    continue
+                if response.content:
+                    outcome["final"] = {"answer": response.content, "status": "answered"}
+                    result.warnings.append("the model answered without calling final_answer")
+                    return
+                continue
+            for call in response.tool_calls:
+                if call.name == "final_answer" and call.arguments is not None:
+                    outcome["final"] = call.arguments
+                    return
+                if answer_now and call.name != "final_answer":
+                    text, events = "Error: the search limit is reached. Call final_answer.", []
+                else:
+                    text, events = await self._run_tool(call, registry, result)
+                for event in events:
+                    yield event
+                messages.append(Message("tool", text, tool_call_id=call.id))
+
+    async def _single_shot(
+        self, question: str, registry: EvidenceRegistry, result: InvestigationResult, outcome: dict
+    ) -> AsyncIterator[AgentEvent]:
+        """The baseline: one search with the question as asked, one answer, no follow-up.
+
+        This is what a "chat with your documents" app does; the evaluation compares the
+        agent against it.
+        """
+        new, _ = registry.add(await self.retriever.search(question, SINGLE_SHOT_K))
+        result.searches.append(question)
+        yield AgentEvent("search", {"query": question, **_summary(new, [])})
+        messages = [
+            Message("system", SINGLE_SHOT_SYSTEM),
+            Message("user", f"Question: {question}\n\nEvidence:\n{registry.format(new, [])}"),
+        ]
+        response = await self._complete(
+            result, messages, tools=[FINAL_ANSWER], tool_choice="required"
+        )
+        call = next(
+            (c for c in response.tool_calls if c.name == "final_answer" and c.arguments), None
+        )
+        outcome["final"] = (
+            call.arguments if call else {"answer": response.content or "", "status": "answered"}
+        )
 
     async def _complete(self, result: InvestigationResult, messages, **kwargs) -> LLMResponse:
         response = await self.llm.complete(messages, max_tokens=4096, **kwargs)

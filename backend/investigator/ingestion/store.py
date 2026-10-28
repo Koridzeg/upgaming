@@ -9,6 +9,7 @@ Ingesting is idempotent per `source_id` (the document's stable external key):
     otherwise                      -> 'created'
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Literal
@@ -67,11 +68,15 @@ async def ingest_document(
     if stored and set(strategies) <= set(stored["strategies"]):
         return IngestResult("unchanged", source_id, stored["id"], stored["version"])
 
-    # CPU-heavy work happens before the transaction, so no lock is held while it runs.
-    fingerprint = simhash(content)
-    chunks = {name: CHUNKERS[name](document, tokenizer) for name in strategies}
-    if embedder is not None:
-        embed_chunks([c for strategy_chunks in chunks.values() for c in strategy_chunks], embedder)
+    # CPU-heavy work happens before the transaction, so no lock is held while it runs, and in
+    # a thread, so a web server's event loop keeps serving other requests meanwhile.
+    def prepare() -> tuple[int, dict[str, list[Chunk]]]:
+        chunks = {name: CHUNKERS[name](document, tokenizer) for name in strategies}
+        if embedder is not None:
+            embed_chunks([c for group in chunks.values() for c in group], embedder)
+        return simhash(content), chunks
+
+    fingerprint, chunks = await asyncio.to_thread(prepare)
 
     try:
         async with conn.transaction():

@@ -1,0 +1,137 @@
+/* Colour tokens: components use these variables, so dark mode is one block below. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --border: #e2e5ea;
+  --text: #1c2026;
+  --muted: #687080;
+  --accent: #2f5bd3;
+  --accent-soft: #e8eefc;
+  --good: #1d7a46;
+  --good-soft: #e3f4ea;
+  --warn: #9a6200;
+  --warn-soft: #fdf3e0;
+  --bad: #b42318;
+  --bad-soft: #fdecea;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171c;
+    --surface: #1c2027;
+    --border: #2d333d;
+    --text: #e6e8ec;
+    --muted: #9aa3b2;
+    --accent: #8aa8ff;
+    --accent-soft: #233154;
+    --good: #6fd39b;
+    --good-soft: #17352a;
+    --warn: #f0b95a;
+    --warn-soft: #3a2e17;
+    --bad: #ff8a80;
+    --bad-soft: #3d1f1d;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+h3 { margin: 0 0 12px; font-size: 16px; }
+h4 { margin: 16px 0 6px; font-size: 14px; }
+
+input, select, textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+button, .button {
+  font: inherit;
+  font-weight: 600;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+button.secondary { background: transparent; color: var(--accent); }
+button:disabled, .disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+
+/* Buttons that look like links (table actions, "close"). */
+.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-weight: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.link.danger { color: var(--bad); }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.card.error { border-color: var(--bad); color: var(--bad); background: var(--bad-soft); }
+
+.muted { color: var(--muted); }
+
+.chip {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-weight: 500;
+  font-size: 14px;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+
+.tag {
+  display: inline-block;
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.tag.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.tag.good { background: var(--good-soft); color: var(--good); border-color: transparent; }
+
+/* A citation marker such as [E3]: clicking it shows the passage. */
+.cite {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 6px;
+  margin: 0 1px;
+  border-radius: 4px;
+  border: none;
+  background: var(--accent-soft);
+  color: var(--accent);
+  vertical-align: baseline;
+}
+.cite.active { background: var(--accent); color: #fff; }
+.cite.unknown { background: var(--bad-soft); color: var(--bad); }
+
+.note { padding: 8px 12px; border-radius: 6px; background: var(--bg); margin: 12px 0; }
+.note.warn { background: var(--warn-soft); color: var(--warn); }
+
+details summary { cursor: pointer; color: var(--muted); margin: 12px 0 6px; }

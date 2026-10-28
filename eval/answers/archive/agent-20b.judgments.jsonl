@@ -1,0 +1,1 @@
+{"id": "S01", "verdict": "partial", "reason": "The answer correctly identifies the two system changes (CHG-2044 and CHG-2041) and the supporting documents, but it omits two of the five affected services listed in the reference (notification-service and settlement-batch)."}

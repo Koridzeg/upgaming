@@ -49,6 +49,19 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    # Ingestion and search (Step 7 chose structural chunking)
+    chunk_strategies: list[str] = ["structural"]
+    max_upload_mb: int = 10
+
+    # Protecting the free LLM quota (200k tokens/day/model) on a public demo: investigations
+    # per client IP. An investigation costs ~4-10k tokens.
+    investigations_per_minute: int = 3
+    investigations_per_day: int = 25
+
+    # The built Angular app, served by the API at "/" when present.
+    frontend_dist: Path = REPO_ROOT / "frontend" / "dist" / "frontend" / "browser"
+    cors_origins: list[str] = []  # e.g. ["http://localhost:4200"] without the dev proxy
+
     @field_validator("llm_models")
     @classmethod
     def _known_providers(cls, models: list[str]) -> list[str]:

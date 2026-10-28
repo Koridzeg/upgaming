@@ -1,0 +1,205 @@
+{
+ "configs": {
+  "agent-120b": {
+   "questions": 2,
+   "score": 0.5,
+   "correct": 0,
+   "partial": 2,
+   "incorrect": 0,
+   "score_by_group": {
+    "synthetic/contradiction": 0.5,
+    "synthetic/multi_doc": 0.5
+   },
+   "citation_precision": 0.75,
+   "citation_recall": 0.375,
+   "evidence_recall": 0.708,
+   "claim_support_rate": 1.0,
+   "abstention_correct": "0/0",
+   "contradictions_detected": "0/1",
+   "injection_S14": null,
+   "failed_runs": 0,
+   "llm_calls": 4,
+   "tokens": 10378.5,
+   "seconds": 50.7
+  },
+  "single-120b": {
+   "questions": 2,
+   "score": 0.75,
+   "correct": 1,
+   "partial": 1,
+   "incorrect": 0,
+   "score_by_group": {
+    "synthetic/contradiction": 0.5,
+    "synthetic/multi_doc": 1.0
+   },
+   "citation_precision": 0.417,
+   "citation_recall": 0.292,
+   "evidence_recall": 0.417,
+   "claim_support_rate": 1.0,
+   "abstention_correct": "0/0",
+   "contradictions_detected": "0/1",
+   "injection_S14": null,
+   "failed_runs": 0,
+   "llm_calls": 2,
+   "tokens": 4118.5,
+   "seconds": 28.493
+  },
+  "agent-20b": {
+   "questions": 2,
+   "score": 0.25,
+   "correct": 0,
+   "partial": 1,
+   "incorrect": 1,
+   "score_by_group": {
+    "synthetic/contradiction": 0.0,
+    "synthetic/multi_doc": 0.5
+   },
+   "citation_precision": 0.75,
+   "citation_recall": 0.375,
+   "evidence_recall": 0.708,
+   "claim_support_rate": 0.375,
+   "abstention_correct": "0/0",
+   "contradictions_detected": "0/1",
+   "injection_S14": null,
+   "failed_runs": 1,
+   "llm_calls": 4.5,
+   "tokens": 10816.5,
+   "seconds": 82.23
+  }
+ },
+ "comparisons": [
+  {
+   "from": "single-120b",
+   "to": "agent-120b",
+   "questions": 2,
+   "difference": -0.25,
+   "ci95": [
+    -0.5,
+    0.0
+   ]
+  },
+  {
+   "from": "agent-20b",
+   "to": "agent-120b",
+   "questions": 2,
+   "difference": 0.25,
+   "ci95": [
+    0.0,
+    0.5
+   ]
+  }
+ ],
+ "not_correct": {
+  "agent-120b": [
+   {
+    "id": "S01",
+    "dataset": "synthetic",
+    "category": "multi_doc",
+    "verdict": "partial",
+    "score": 0.5,
+    "reason": "The answer correctly identifies the root cause changes (CHG-2044 and CHG-2041) and the documents, but it fails to list the specific affected services (merchant-api, payment-gateway, fraud-scoring, notification-service, settlement-batch) required by the reference, instead naming only 'Card Payments service' and 'Checkout API'.",
+    "status": "answered",
+    "citation_precision": 0.75,
+    "citation_recall": 0.75,
+    "evidence_recall": 0.75,
+    "supported_claims": 4,
+    "verified_claims": 4,
+    "contradiction_found": false,
+    "expect_contradiction": false,
+    "expect_abstain": false,
+    "llm_calls": 6,
+    "tokens": 18108,
+    "seconds": 59.19,
+    "searches": 3
+   },
+   {
+    "id": "S02",
+    "dataset": "synthetic",
+    "category": "contradiction",
+    "verdict": "partial",
+    "score": 0.5,
+    "reason": "The answer correctly identifies one of the conflicting timestamps (13:52 UTC) but fails to report the contradiction with the other sources (14:05 UTC) as required by the reference.",
+    "status": "answered",
+    "citation_precision": null,
+    "citation_recall": 0.0,
+    "evidence_recall": 0.6666666666666666,
+    "supported_claims": 0,
+    "verified_claims": 0,
+    "contradiction_found": false,
+    "expect_contradiction": true,
+    "expect_abstain": false,
+    "llm_calls": 2,
+    "tokens": 2649,
+    "seconds": 42.21,
+    "searches": 1
+   }
+  ],
+  "single-120b": [
+   {
+    "id": "S02",
+    "dataset": "synthetic",
+    "category": "contradiction",
+    "verdict": "partial",
+    "score": 0.5,
+    "reason": "The answer provides one of the conflicting timestamps (14:05 UTC) but fails to mention the discrepancy with the postmortem (13:52 UTC) or that sources disagree, which is a key requirement of the reference answer.",
+    "status": "answered",
+    "citation_precision": 0.5,
+    "citation_recall": 0.3333333333333333,
+    "evidence_recall": 0.3333333333333333,
+    "supported_claims": 1,
+    "verified_claims": 1,
+    "contradiction_found": false,
+    "expect_contradiction": true,
+    "expect_abstain": false,
+    "llm_calls": 2,
+    "tokens": 2951,
+    "seconds": 24.423,
+    "searches": 1
+   }
+  ],
+  "agent-20b": [
+   {
+    "id": "S01",
+    "dataset": "synthetic",
+    "category": "multi_doc",
+    "verdict": "partial",
+    "score": 0.5,
+    "reason": "The answer correctly identifies the two system changes (CHG-2044 and CHG-2041) and the supporting documents, but it omits two of the five affected services listed in the reference (notification-service and settlement-batch).",
+    "status": "answered",
+    "citation_precision": 0.75,
+    "citation_recall": 0.75,
+    "evidence_recall": 0.75,
+    "supported_claims": 3,
+    "verified_claims": 8,
+    "contradiction_found": false,
+    "expect_contradiction": false,
+    "expect_abstain": false,
+    "llm_calls": 7,
+    "tokens": 19224,
+    "seconds": 77.018,
+    "searches": 4
+   },
+   {
+    "id": "S02",
+    "dataset": "synthetic",
+    "category": "contradiction",
+    "verdict": "failed",
+    "score": 0.0,
+    "reason": "the investigation did not complete",
+    "status": "failed",
+    "citation_precision": null,
+    "citation_recall": 0.0,
+    "evidence_recall": 0.6666666666666666,
+    "supported_claims": 0,
+    "verified_claims": 0,
+    "contradiction_found": false,
+    "expect_contradiction": true,
+    "expect_abstain": false,
+    "llm_calls": 2,
+    "tokens": 2409,
+    "seconds": 87.441,
+    "searches": 1
+   }
+  ]
+ }
+}

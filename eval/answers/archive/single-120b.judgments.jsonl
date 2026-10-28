@@ -1,0 +1,2 @@
+{"id": "S01", "verdict": "correct", "reason": "The answer correctly identifies the specific system changes (CHG-2044 and CHG-2041) and the affected services listed in the reference, while providing additional accurate context about a separate incident and the confirming documents."}
+{"id": "S02", "verdict": "partial", "reason": "The answer provides one of the conflicting timestamps (14:05 UTC) but fails to mention the discrepancy with the postmortem (13:52 UTC) or that sources disagree, which is a key requirement of the reference answer."}
