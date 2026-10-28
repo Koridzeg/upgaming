@@ -95,12 +95,26 @@ the ids are fixed in `eval/retrieval_sample.json`) plus the answerable synthetic
 Metrics: recall@K, all@K (every gold document found), MRR, nDCG@10, sentence recall@10,
 with paired-bootstrap confidence intervals. See [eval/retrieval_report.md](eval/retrieval_report.md).
 
+## Investigating
+
+The agent searches in as many steps as it needs (each search can use what the previous one
+revealed), then answers with `[E#]` citations, reports contradictions between sources, and says
+so when the evidence is insufficient. A second LLM pass checks every cited claim.
+
+```bash
+python -m investigator.agent "Which system changes caused the payment processing delays in March 2026?"
+```
+
 ## LLM providers
 
 Groq and Gemini, through their OpenAI-compatible APIs, behind one client with retries
-(exponential backoff, or the provider's own `Retry-After`), fallback to the other provider, a
-circuit breaker, tool calling, streaming and token/latency counters. Set either key in `.env`
-(both free); with both, the second is the fallback.
+(exponential backoff, or the provider's own `Retry-After`), a fallback chain of models
+(`LLM_MODELS`), a circuit breaker, tool calling, streaming and token/latency counters.
+
+Free-tier limits measured on 2026-10-28, which shape the defaults: every Groq model has its own
+1,000 requests/day and 8,000 tokens/minute; Gemini allows 5 requests/minute and 20/day. So the
+chain is `gpt-oss-120b` -> `gpt-oss-20b` (Groq, separate budgets) -> `gemini-3.5-flash` (last
+resort, independent provider).
 
 ```bash
 python -m investigator.llm --models   # model ids your keys can use

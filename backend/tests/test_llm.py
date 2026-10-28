@@ -7,9 +7,14 @@ import httpx2 as httpx
 import pytest
 
 from investigator.llm.client import COOLDOWN, FAILURE_THRESHOLD, LLMClient
-from investigator.llm.errors import AllProvidersFailed, AuthenticationFailed, RequestRejected
+from investigator.llm.errors import (
+    AllProvidersFailed,
+    AuthenticationFailed,
+    RateLimited,
+    RequestRejected,
+)
 from investigator.llm.provider import OpenAICompatibleProvider
-from investigator.llm.types import Message, ToolSpec
+from investigator.llm.types import Message, ToolCall, ToolSpec
 
 QUESTION = [Message("user", "What is 2 + 2?")]
 
@@ -91,12 +96,70 @@ def test_tool_calls_are_parsed_and_bad_arguments_reported_not_raised():
     assert bad.arguments is None and "invalid JSON" in bad.error
 
 
+def test_provider_specific_tool_call_fields_are_sent_back_unchanged():
+    """Gemini 3 rejects the next turn (400) unless each call's thought_signature comes back."""
+    signed = {
+        "id": "c1",
+        "type": "function",
+        "function": {"name": "search", "arguments": "{}"},
+        "extra_content": {"google": {"thought_signature": "opaque-signature"}},
+    }
+    handler = Scripted(ok(None, [signed]), ok("done"))
+    provider, _ = make("gemini", handler)
+
+    async def two_turns():
+        first = await provider.complete(QUESTION)
+        call = first.tool_calls[0]
+        follow_up = [*QUESTION, first.as_message(), Message("tool", "[]", tool_call_id=call.id)]
+        await provider.complete(follow_up)
+
+    asyncio.run(two_turns())
+
+    echoed = json.loads(handler.requests[1].content)["messages"][1]["tool_calls"][0]
+    assert echoed == signed
+
+
+def test_tool_calls_from_another_provider_reach_gemini_as_plain_text():
+    """After a fallback, Gemini 3 would reject unsigned tool calls in the history (400)."""
+    unsigned = ToolCall("g1", "search", {"query": "pool"}, '{"query": "pool"}')
+    history = [
+        *QUESTION,
+        Message("assistant", None, [unsigned]),
+        Message("tool", "The pool was raised to 150.", tool_call_id="g1"),
+    ]
+    handler = Scripted(ok("150"))
+    gemini, _ = make("gemini", handler, signed_tool_calls=True)
+
+    asyncio.run(gemini.complete(history))
+
+    sent = json.loads(handler.requests[0].content)["messages"]
+    assert "tool_calls" not in sent[1]
+    assert 'search({"query": "pool"})' in sent[1]["content"]
+    assert sent[2] == {
+        "role": "user",
+        "content": "[Result of tool call g1]\nThe pool was raised to 150.",
+    }
+
+
 def test_short_rate_limit_waits_exactly_as_asked_then_succeeds():
     handler = Scripted(httpx.Response(429, headers={"retry-after": "2"}), ok())
     provider, sleeps = make("groq", handler)
 
     assert asyncio.run(provider.complete(QUESTION)).content == "4"
     assert sleeps == [2.0]
+
+
+def test_rate_limit_waits_have_their_own_budget():
+    limited = httpx.Response(429, headers={"retry-after": "1"})
+    # max_retries=0: no retries for failures, yet short rate-limit waits still happen
+    provider, sleeps = make("groq", Scripted(limited, limited, ok()), max_retries=0)
+    assert asyncio.run(provider.complete(QUESTION)).content == "4"
+    assert sleeps == [1.0, 1.0]
+
+    # ...but only up to max_rate_limit_waits, then the next model gets a chance
+    always_limited, _ = make("groq", Scripted(limited), max_rate_limit_waits=4)
+    with pytest.raises(RateLimited):
+        asyncio.run(always_limited.complete(QUESTION))
 
 
 def test_gemini_style_retry_delay_in_the_body_is_honoured():
@@ -124,6 +187,17 @@ def test_server_errors_and_timeouts_are_retried_with_growing_backoff():
 
     assert asyncio.run(provider.complete(QUESTION)).content == "4"
     assert 1.0 <= sleeps[0] <= 2.0 and 2.0 <= sleeps[1] <= 4.0  # 2^attempt x jitter in [1, 2]
+
+
+def test_a_malformed_tool_call_from_the_model_is_retried():
+    message = "attempted to call tool 'commentary' which was not in request.tools"
+    bad_generation = httpx.Response(
+        400, json={"error": {"code": "tool_use_failed", "message": message}}
+    )
+    provider, sleeps = make("groq", Scripted(bad_generation, ok()), max_retries=1)
+
+    assert asyncio.run(provider.complete(QUESTION)).content == "4"
+    assert len(sleeps) == 1  # a bad generation, not a bad request: worth one more try
 
 
 def test_bad_key_is_not_retried_but_falls_back():

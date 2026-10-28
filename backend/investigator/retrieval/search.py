@@ -164,6 +164,24 @@ def _truncate(hits: list[SearchHit], k: int) -> list[SearchHit]:
     return hits[:k]
 
 
+async def fetch_neighbors(conn: asyncpg.Connection, chunk_id: int) -> list[SearchHit]:
+    """The chunks just before and after `chunk_id` in its document (same strategy)."""
+    rows = await conn.fetch(
+        """
+        SELECT n.id
+          FROM chunks c
+          JOIN chunks n ON n.document_id = c.document_id
+                       AND n.strategy = c.strategy
+                       AND n.chunk_index IN (c.chunk_index - 1, c.chunk_index + 1)
+         WHERE c.id = $1
+         ORDER BY n.chunk_index
+        """,
+        chunk_id,
+    )
+    hits = await fetch_hits(conn, [r["id"] for r in rows])
+    return [hits[r["id"]] for r in rows]
+
+
 async def fetch_hits(conn: asyncpg.Connection, chunk_ids: list[int]) -> dict[int, SearchHit]:
     """Load chunks with their documents' title and metadata, keyed by chunk id."""
     rows = await conn.fetch(

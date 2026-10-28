@@ -8,6 +8,7 @@ that's down or out of quota. After the cooldown one call is let through as a pro
 closes the breaker again.
 """
 
+import logging
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import asdict, dataclass
@@ -16,6 +17,8 @@ from investigator.config import Settings
 from investigator.llm.errors import AllProvidersFailed, LLMError
 from investigator.llm.provider import OpenAICompatibleProvider
 from investigator.llm.types import LLMResponse, Message, ToolSpec
+
+logger = logging.getLogger(__name__)
 
 FAILURE_THRESHOLD = 3
 COOLDOWN = 60.0
@@ -52,6 +55,7 @@ class LLMClient:
         messages: list[Message],
         *,
         tools: list[ToolSpec] | None = None,
+        tool_choice: str | None = None,
         temperature: float = 0.0,
         max_tokens: int = 1024,
         json_mode: bool = False,
@@ -62,6 +66,7 @@ class LLMClient:
                 response = await provider.complete(
                     messages,
                     tools=tools,
+                    tool_choice=tool_choice,
                     temperature=temperature,
                     max_tokens=max_tokens,
                     json_mode=json_mode,
@@ -113,6 +118,9 @@ class LLMClient:
         return closed or list(self.providers)
 
     def _failed(self, provider: OpenAICompatibleProvider, error: LLMError) -> None:
+        # Every fallback is logged with its cause: a silent switch to another model would make
+        # quality changes (and evaluation results) impossible to explain.
+        logger.warning("llm provider %s failed, trying the next one: %s", provider.name, error)
         stats = self.stats[provider.name]
         stats.calls += 1
         stats.failures += 1
@@ -131,24 +139,26 @@ class LLMClient:
 
 
 def client_from_settings(settings: Settings) -> LLMClient:
-    """Providers in preference order, for whichever API keys are configured."""
+    """The model chain from settings, skipping entries whose provider has no API key."""
+    endpoints = {
+        "groq": (GROQ_URL, settings.groq_api_key),
+        "gemini": (GEMINI_URL, settings.gemini_api_key),
+    }
     providers = []
-    candidates = [
-        ("groq", GROQ_URL, settings.groq_api_key, settings.groq_model),
-        ("gemini", GEMINI_URL, settings.gemini_api_key, settings.gemini_model),
-    ]
-    by_name = {name: (url, key, model) for name, url, key, model in candidates}
-    for name in settings.llm_provider_order:
-        url, key, model = by_name[name]
+    for entry in settings.llm_models:
+        provider, _, model = entry.partition(":")
+        url, key = endpoints[provider]
         if key is not None and key.get_secret_value():
             providers.append(
                 OpenAICompatibleProvider(
-                    name,
+                    entry,  # "groq:openai/gpt-oss-120b": each model has its own stats/breaker
                     url,
                     key.get_secret_value(),
                     model,
                     timeout=settings.llm_timeout_seconds,
                     max_retries=settings.llm_max_retries,
+                    max_wait=settings.llm_max_wait_seconds,
+                    signed_tool_calls=provider == "gemini",
                 )
             )
     return LLMClient(providers)

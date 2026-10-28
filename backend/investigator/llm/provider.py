@@ -40,13 +40,17 @@ class OpenAICompatibleProvider:
         model: str,
         *,
         timeout: float = 60.0,
-        max_retries: int = 2,
+        max_retries: int = 2,  # for failures: 5xx, timeouts, malformed responses
+        max_rate_limit_waits: int = 4,  # for 429s that say how long to wait
         max_wait: float = 20.0,  # longer rate-limit waits go to the next provider instead
+        signed_tool_calls: bool = False,  # Gemini 3: tool calls in history need signatures
         transport: httpx.AsyncBaseTransport | None = None,  # tests pass a MockTransport
         sleep: Callable[[float], Awaitable] = asyncio.sleep,
     ):
         self.name, self.model = name, model
         self.max_retries, self.max_wait = max_retries, max_wait
+        self.max_rate_limit_waits = max_rate_limit_waits
+        self.signed_tool_calls = signed_tool_calls
         self._sleep = sleep
         self._http = httpx.AsyncClient(
             base_url=base_url.rstrip("/"),
@@ -60,12 +64,16 @@ class OpenAICompatibleProvider:
         messages: list[Message],
         *,
         tools: list[ToolSpec] | None = None,
+        tool_choice: str | None = None,  # "auto" (default), "required" or "none"
         temperature: float = 0.0,
         max_tokens: int = 1024,
         json_mode: bool = False,
     ) -> LLMResponse:
         body = self._body(messages, tools, temperature, max_tokens, json_mode)
-        for attempt in range(self.max_retries + 1):
+        if tools and tool_choice:
+            body["tool_choice"] = tool_choice
+        retries = _Retries(self)
+        while True:
             started = time.perf_counter()
             try:
                 response = await self._post(body)
@@ -81,8 +89,7 @@ class OpenAICompatibleProvider:
                     result.usage.prompt_tokens, result.usage.completion_tokens,
                 )  # fmt: skip
                 return result
-            await self._before_retry(error, attempt)
-        raise AssertionError("unreachable")  # _before_retry raises on the last attempt
+            await retries.wait_or_raise(error)
 
     async def stream(
         self,
@@ -98,7 +105,8 @@ class OpenAICompatibleProvider:
         """
         body = self._body(messages, None, temperature, max_tokens, json_mode=False)
         body["stream"] = True
-        for attempt in range(self.max_retries + 1):
+        retries = _Retries(self)
+        while True:
             started_output = False
             try:
                 async with self._http.stream("POST", "/chat/completions", json=body) as response:
@@ -126,7 +134,7 @@ class OpenAICompatibleProvider:
                 error = exc
             if started_output:
                 raise error
-            await self._before_retry(error, attempt)
+            await retries.wait_or_raise(error)
 
     async def list_models(self) -> list[str]:
         response = await self._http.get("/models")
@@ -138,9 +146,12 @@ class OpenAICompatibleProvider:
         await self._http.aclose()
 
     def _body(self, messages, tools, temperature, max_tokens, json_mode) -> dict:
+        wire = [m.to_openai() for m in messages]
+        if self.signed_tool_calls:
+            wire = _flatten_unsigned_tool_calls(wire)
         body: dict = {
             "model": self.model,
-            "messages": [m.to_openai() for m in messages],
+            "messages": wire,
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
@@ -169,22 +180,13 @@ class OpenAICompatibleProvider:
             return AuthenticationFailed(f"{status}: check the API key", self.name)
         if status >= 500:
             return ProviderUnavailable(f"{status} {text}", self.name)
+        if '"tool_use_failed"' in text or '"output_parse_failed"' in text:
+            # Groq validates the model's own output and answers 400 when it is malformed (seen
+            # live: gpt-oss calling a non-existent tool 'commentary', sending null for a string
+            # field, or writing unparseable output). A bad *generation*, not a bad request:
+            # worth a retry.
+            return InvalidResponse(f"model produced invalid output: {text}", self.name)
         return RequestRejected(f"{status} {text}", self.name)
-
-    async def _before_retry(self, error: LLMError, attempt: int) -> None:
-        """Wait before the next attempt, or raise if this error shouldn't be retried here."""
-        if not error.retryable or attempt >= self.max_retries:
-            raise error
-        if isinstance(error, RateLimited) and error.retry_after is not None:
-            if error.retry_after > self.max_wait:
-                raise error  # waiting that long is worse than asking another provider
-            delay = error.retry_after
-        else:
-            # Exponential backoff with jitter: 1-2 s, then 2-4 s... The randomness spreads out
-            # clients that failed together, so they don't all retry in the same instant.
-            delay = 2**attempt * random.uniform(1.0, 2.0)
-        logger.warning("retrying %s in %.1fs after: %s", self.name, delay, error)
-        await self._sleep(delay)
 
     def _parse(self, data: dict, started: float) -> LLMResponse:
         choice = data["choices"][0]
@@ -203,6 +205,38 @@ class OpenAICompatibleProvider:
         )
 
 
+class _Retries:
+    """Whether, and how long, to wait before the next attempt of one request.
+
+    Two separate budgets, because the two situations differ:
+    - a 429 that says how long to wait (Groq's token budget refills within seconds): waiting is
+      cheap and keeps the stronger model, so up to max_rate_limit_waits such waits;
+    - a failure (5xx, timeout, garbage): exponential backoff with jitter, max_retries times.
+    """
+
+    def __init__(self, provider: "OpenAICompatibleProvider"):
+        self.provider = provider
+        self.failures = 0
+        self.waits = 0
+
+    async def wait_or_raise(self, error: LLMError) -> None:
+        p = self.provider
+        if isinstance(error, RateLimited) and error.retry_after is not None:
+            if error.retry_after > p.max_wait or self.waits >= p.max_rate_limit_waits:
+                raise error  # a long wait is worse than asking the next model
+            self.waits += 1
+            delay = error.retry_after
+        else:
+            if not error.retryable or self.failures >= p.max_retries:
+                raise error
+            # Backoff 1-2 s, then 2-4 s... The randomness spreads out clients that failed
+            # together, so they don't all retry in the same instant.
+            delay = 2**self.failures * random.uniform(1.0, 2.0)
+            self.failures += 1
+        logger.warning("retrying %s in %.1fs after: %s", p.name, delay, error)
+        await p._sleep(delay)
+
+
 def _tool_call(call: dict, index: int) -> ToolCall:
     function = call["function"]
     raw = function.get("arguments") or "{}"
@@ -217,7 +251,34 @@ def _tool_call(call: dict, index: int) -> ToolCall:
         arguments=arguments if error is None else None,
         raw_arguments=raw if isinstance(raw, str) else json.dumps(raw),
         error=error,
+        extra={k: v for k, v in call.items() if k not in ("id", "type", "function")},
     )
+
+
+def _flatten_unsigned_tool_calls(messages: list[dict]) -> list[dict]:
+    """Rewrite tool calls that carry no signature as plain text.
+
+    Gemini 3 rejects (400) a history containing tool calls without its thought_signature -
+    exactly what a conversation has after another provider made those calls and Gemini takes
+    over as the fallback. As plain text ("earlier tool call ... and its result") the same
+    information is accepted by any model.
+    """
+    flattened, unsigned = [], set()
+    for message in messages:
+        calls = message.get("tool_calls") or []
+        if calls and not all("extra_content" in call for call in calls):
+            unsigned.update(call["id"] for call in calls)
+            described = "; ".join(
+                f"{c['function']['name']}({c['function']['arguments']})" for c in calls
+            )
+            text = f"{message.get('content') or ''}\n[Earlier tool calls: {described}]".strip()
+            flattened.append({"role": "assistant", "content": text})
+        elif message["role"] == "tool" and message.get("tool_call_id") in unsigned:
+            content = f"[Result of tool call {message['tool_call_id']}]\n{message['content']}"
+            flattened.append({"role": "user", "content": content})
+        else:
+            flattened.append(message)
+    return flattened
 
 
 def _retry_after(response: httpx.Response) -> float | None:

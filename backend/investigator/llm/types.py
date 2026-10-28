@@ -13,9 +13,14 @@ class ToolCall:
     arguments: dict[str, Any] | None  # None when the model produced invalid JSON
     raw_arguments: str = ""
     error: str | None = None  # why `arguments` is None; sent back to the model to fix
+    # Provider-specific fields beyond the OpenAI format, echoed back unchanged when the call is
+    # sent back to the model. Gemini 3 needs this: each call carries
+    # extra_content.google.thought_signature, and omitting it is rejected with a 400.
+    extra: dict[str, Any] = field(default_factory=dict)
 
     def to_openai(self) -> dict:
         return {
+            **self.extra,
             "id": self.id,
             "type": "function",
             "function": {"name": self.name, "arguments": self.raw_arguments},
