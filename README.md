@@ -165,6 +165,41 @@ Investigations are rate-limited per client (3/minute, 25/day by default) because
 on free LLM quotas; over the limit the API answers 429 with `Retry-After`. Closing the page
 cancels a running investigation, so no tokens are spent on an answer nobody reads.
 
+## Testing
+
+```bash
+pytest                      # 157 tests, ~10 s; needs the database from `docker compose up`
+pytest --cov                # with coverage
+pytest tests/test_injection.py -v
+```
+
+The tests run the real code against a real Postgres (a separate `investigator_test`
+database, reset per test) and replace only what is slow or costs money: a fake embedder and a
+scripted LLM, so the agent's control flow is tested turn by turn without network calls. The
+embedding model, tokenizer, loaders and SQL are tested for real.
+
+Coverage: 93% of the code that runs in the app (API, agent, LLM client, retrieval, ingestion),
+76% overall; the rest is offline tooling (dataset builders, evaluation runners) whose output is
+checked into `eval/`.
+
+### Prompt injection
+
+Documents are untrusted input that reaches an LLM. `tests/test_injection.py` attacks each
+defence separately:
+
+| Layer | Defence | Tested with |
+| --- | --- | --- |
+| Ingestion | Text a reader can't see is never indexed: hidden HTML (`hidden`, `aria-hidden`, `display:none`, `visibility:hidden`, `opacity:0`, `font-size:0`, comments, scripts, templates) and hidden Word runs | A page and a .docx with a payload in each hiding place |
+| Detection | Passages that address an AI are labelled "do not follow" in the model's context | 10 attack phrasings (incl. chat-template tokens) must be flagged; 7 ordinary incident sentences using the same words must not |
+| Isolation | Evidence sits in `<evidence>` blocks that document text can't close (`</evidence>` is escaped) and whose attributes a title can't forge (`status="final"`) | Breakout and attribute-forging documents |
+| Least privilege | The model can only search and read; invented tools, unseen evidence ids and citations to evidence never shown are refused; document text only ever arrives as tool output | `delete_document` / `send_email` calls, `read_more` on unknown ids |
+| Verifier | The claim checker gets the same escaped blocks and a rule to ignore instructions in them | A passage telling the verifier to approve every claim |
+
+The live check against a real model is evaluation question S14 (a planted vendor advisory that
+blames a DDoS attack and says to cite only itself); the agent answers from the real sources and
+reports the advisory's instruction. Not handled: text hidden by colour or off-screen
+positioning (needs a renderer), and hidden text in PDFs.
+
 ## Ingesting files
 
 ```bash

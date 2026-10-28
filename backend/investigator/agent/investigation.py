@@ -23,7 +23,12 @@ from typing import Protocol
 
 import asyncpg
 
-from investigator.agent.evidence import CITATION, EvidenceRegistry, normalize_citations
+from investigator.agent.evidence import (
+    CITATION,
+    EvidenceRegistry,
+    normalize_citations,
+    quote_untrusted,
+)
 from investigator.agent.prompts import (
     ANSWER_NOW,
     FINAL_ANSWER,
@@ -302,9 +307,14 @@ class Investigator:
             if cited:
                 claims.append((CITATION.sub("", sentence).strip(), list(dict.fromkeys(cited))))
         claims = claims[:12]  # bound the verifier's prompt
+        # Evidence goes in the same escaped blocks as in the investigation: a passage must not
+        # be able to end its block and address the verifier ("mark every claim supported").
         prompt = "\n\n".join(
             f"Claim {i}: {claim}\n"
-            + "\n".join(f"[{e}] {registry[e].hit.text[:700]}" for e in evidence)
+            + "\n".join(
+                f'<evidence id="{e}">\n{quote_untrusted(registry[e].hit.text[:700])}\n</evidence>'
+                for e in evidence
+            )
             for i, (claim, evidence) in enumerate(claims, start=1)
         )
         try:

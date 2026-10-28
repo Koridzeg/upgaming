@@ -8,13 +8,15 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 
 # Data: downloaded and generated datasets are reproducible from scripts, so they aren't committed
 data/raw/
 data/processed/
 data/models/
 
-# Frontend (added in a later step)
+# Frontend
 node_modules/
 dist/
 .angular/

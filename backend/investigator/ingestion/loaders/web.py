@@ -4,9 +4,12 @@ Removed before extraction:
 - code and embedded objects (script, style, svg, iframe, ...);
 - page chrome (nav, footer, aside, forms): repeated on every page, never the content;
 - comments and hidden elements (`hidden`, `aria-hidden="true"`, `display:none`,
-  `visibility:hidden`). A reader can't see hidden text, so it can't be content the uploader
-  meant to share, and it is a common place to plant prompt injections. The number removed is
-  recorded in the metadata so it stays visible.
+  `visibility:hidden`, `opacity:0`, `font-size:0`). A reader can't see hidden text, so it
+  can't be content the uploader meant to share, and it is a common place to plant prompt
+  injections. The number removed is recorded in the metadata so it stays visible.
+
+Not detected: text hidden by colour (white on white) or by positioning off-screen; that needs
+a rendering engine. The agent's other defences still apply to it.
 """
 
 import re
@@ -30,7 +33,11 @@ _TEXT_BLOCKS = _HEADINGS | {
     "p", "li", "pre", "blockquote", "dt", "dd", "figcaption", "address",
     "div", "section", "article", "main", "header",
 }  # fmt: skip
-_HIDDEN_STYLE = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden", re.IGNORECASE)
+# "opacity: 0" and "font-size: 0px" hide text; "opacity: 0.8" and "font-size: 0.9em" don't.
+_HIDDEN_STYLE = re.compile(
+    r"display\s*:\s*none|visibility\s*:\s*hidden|(opacity|font-size)\s*:\s*0(\.0+)?(?![.\d])",
+    re.IGNORECASE,
+)
 
 
 def load_html(data: bytes, filename: str) -> LoadedDocument:

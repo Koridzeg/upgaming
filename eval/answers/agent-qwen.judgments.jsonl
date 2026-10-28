@@ -1,0 +1,42 @@
+{"id": "S01", "verdict": "partial", "reason": "The answer correctly identifies CHG-2044 and CHG-2041 and lists the affected services and confirming documents, but it omits the reference fact that CHG-2043 was ruled out and adds an unrelated second incident."}
+{"id": "S02", "verdict": "partial", "reason": "The answer correctly lists both the postmortem time (13:52 UTC) and the first page time (14:05 UTC), but incorrectly claims there are no contradictions, whereas the reference explicitly states the sources disagree."}
+{"id": "S03", "verdict": "partial", "reason": "The answer cites only the draft postmortem figure (11,900) and omits the other conflicting figures (12,400 and ~9,000) and the note that the final postmortem is the most authoritative source."}
+{"id": "S04", "verdict": "partial", "reason": "The answer correctly states the 150 figure from the change log and Slack, but omits the postmortem claim that the pool was restored to 200, which is a key fact in the reference."}
+{"id": "S05", "verdict": "correct", "reason": "The answer correctly states that no approver is recorded for CHG-2041, matching the reference."}
+{"id": "S06", "verdict": "correct", "reason": "The answer correctly states that the financial cost is not documented in any source, matching the reference."}
+{"id": "S07", "verdict": "correct", "reason": "The answer correctly states that no April 2026 payment outage is documented, matching the reference; the omission of the scheduled change CHG-2055 does not contradict the key facts."}
+{"id": "S08", "verdict": "correct", "reason": "The answer correctly states the minimum connection pool size as 150 and matches the reference details."}
+{"id": "S09", "verdict": "correct", "reason": "Matches all key facts and adds no incorrect info."}
+{"id": "S10", "verdict": "correct", "reason": "Matches key facts and no contradictions."}
+{"id": "S11", "verdict": "correct", "reason": "The answer correctly states that CHG-2043 was ruled out, gives the same timestamp and lock‑wait detail, and adds no contradictory information."}
+{"id": "S12", "verdict": "correct", "reason": "The answer correctly states the cause (consumer rebalancing loop after Kafka upgrade CHG-2051) and that card payments were not affected, matching the reference; additional details do not conflict."}
+{"id": "S13", "verdict": "correct", "reason": "The answer correctly identifies incident INC-2026-0217, notes the slow authorisations caused by a degradation at the external acquiring partner NetAcq, and states that no internal change was involved, matching the reference."}
+{"id": "S14", "verdict": "correct", "reason": "The answer correctly states that the incident was not caused by a DDoS attack, cites the postmortem attributing it to CHG‑2044 and CHG‑2041, and notes the vendor advisory claim as untrusted, matching the reference."}
+{"id": "S15", "verdict": "incorrect", "reason": "The answer incorrectly states that AI‑2 and AI‑3 are still open, whereas the reference says AI‑2 is in progress (scheduled as CHG‑2055 on 2026‑04‑08) and AI‑3 is done."}
+{"id": "S16", "verdict": "correct", "reason": "The answer correctly states the 47‑minute delay and the approximate start time of 02:47 UTC, matching the reference answer, and adds no contradictory information."}
+{"id": "S17", "verdict": "correct", "reason": "The answer accurately states the detection via the merchant‑api 5xx alert at 14:05 UTC, the 13‑minute lag, the non‑paging fraud‑scoring warning at 13:49, and the absence of a pool‑saturation alert (later added as AI‑1), matching the reference."}
+{"id": "S18", "verdict": "correct", "reason": "Matches key facts and adds no incorrect info."}
+{"id": "S19", "verdict": "correct", "reason": "The answer correctly states that Marco Silva was the incident commander for INC-2026-0311 and does not contradict the reference."}
+{"id": "S20", "verdict": "correct", "reason": "The answer correctly states that the normal p99 latency is not documented and cites the single p95 warning above 500 ms on 2026‑03‑05, matching the reference."}
+{"id": "5a7a51b95542990783324f0f", "verdict": "correct", "reason": "The answer correctly states that Liam Cunningham was born first and provides accurate birth dates supporting this fact."}
+{"id": "5a8b128455429971feec463b", "verdict": "correct", "reason": "The answer correctly identifies the event as being hosted within the City and County of Honolulu, matching the reference."}
+{"id": "5abbdf8055429931dba145bb", "verdict": "correct", "reason": "The answer correctly identifies the actor (Norman Reedus) and the company (Prada) as requested."}
+{"id": "5abbeb7d554299114383a09b", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5ac38bf355429939154137ba", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5ae4cb2f55429960a22e01e8", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5a79395455429970f5fffe7d", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5ae5ff635542996de7b71ace", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5a810006554299260e20a1f6", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5ae63e3255429929b0807aff", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5ac160bb5542994d76dccdfb", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5ac285335542996773102552", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5abdd8d95542991f6610606a", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5ab492155542991779162ce3", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5ae0361155429925eb1afc2c", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5abebbe65542997719eab59d", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5ab5e13c5542992aa134a3bf", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5ac09da45542996f0d89cc1d", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5abbee315542993f40c73c1d", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5abd81ff5542993062266cb3", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5ac2759655429921a00aaf7f", "verdict": "failed", "reason": "the investigation did not complete"}
+{"id": "5a8e068b5542995085b37384", "verdict": "failed", "reason": "the investigation did not complete"}

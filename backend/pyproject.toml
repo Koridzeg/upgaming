@@ -34,6 +34,7 @@ data = [
 ]
 dev = [
     "pytest>=8.3",
+    "pytest-cov>=6.0",
     "ruff>=0.8",
 ]
 
@@ -46,6 +47,11 @@ include = ["investigator*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["investigator"]
+# Command-line entry points and data-preparation scripts, run by hand rather than by the app.
+omit = ["*/__main__.py", "investigator/datasets/download.py"]
 
 [tool.ruff]
 line-length = 100
