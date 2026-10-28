@@ -16,6 +16,7 @@ from uuid import UUID
 
 import asyncpg
 
+from investigator.embedding import Embedder, embedding_input, ensure_embedding_model
 from investigator.ingestion.chunking import CHUNKERS, Chunk
 from investigator.ingestion.dedup import NEAR_DUPLICATE_MAX_DISTANCE, simhash
 from investigator.ingestion.models import LoadedDocument
@@ -46,15 +47,36 @@ async def ingest_document(
     source_type: str,
     strategies: list[str],
     tokenizer: Tokenizer,
+    embedder: Embedder | None = None,  # None: chunks are stored without vectors (tests)
 ) -> IngestResult:
     content = document.text
     digest = content_hash(content)
-    fingerprint = simhash(content)
+
+    # Fast path, without a transaction: re-uploading an unchanged file costs one query instead
+    # of chunking and embedding it again. The authoritative check is repeated under the lock.
+    stored = await conn.fetchrow(
+        """
+        SELECT d.id, d.version, array_agg(DISTINCT c.strategy) AS strategies
+          FROM documents d LEFT JOIN chunks c ON c.document_id = d.id
+         WHERE d.source_id = $1 AND d.content_hash = $2
+         GROUP BY d.id
+        """,
+        source_id,
+        digest,
+    )
+    if stored and set(strategies) <= set(stored["strategies"]):
+        return IngestResult("unchanged", source_id, stored["id"], stored["version"])
+
     # CPU-heavy work happens before the transaction, so no lock is held while it runs.
+    fingerprint = simhash(content)
     chunks = {name: CHUNKERS[name](document, tokenizer) for name in strategies}
+    if embedder is not None:
+        embed_chunks([c for strategy_chunks in chunks.values() for c in strategy_chunks], embedder)
 
     try:
         async with conn.transaction():
+            if embedder is not None:
+                await ensure_embedding_model(conn, embedder)
             return await _write(conn, document, source_id, source_type, digest, fingerprint, chunks)
     except asyncpg.UniqueViolationError as exc:
         # The duplicate check inside _write saw no twin, but a concurrent ingest stored the
@@ -90,7 +112,7 @@ async def _write(
             )
         }
         missing = {name: c for name, c in chunks.items() if name not in present}
-        added = await _insert_chunks(conn, existing["id"], missing)
+        added = await insert_chunks(conn, existing["id"], missing)
         return IngestResult("unchanged", source_id, existing["id"], existing["version"], added)
 
     twin = await conn.fetchval("SELECT source_id FROM documents WHERE content_hash = $1", digest)
@@ -137,23 +159,36 @@ async def _write(
         )  # fmt: skip
         status = "created"
 
-    count = await _insert_chunks(conn, row["id"], chunks)
+    count = await insert_chunks(conn, row["id"], chunks)
     return IngestResult(status, source_id, row["id"], row["version"], count, near_duplicates=near)
 
 
-async def _insert_chunks(
+def embed_chunks(chunks: list[Chunk], embedder: Embedder) -> None:
+    """Set `chunk.embedding` on every chunk, embedding each distinct input text only once.
+
+    Identical inputs are common: a document shorter than the chunk size produces the very same
+    chunk under both strategies.
+    """
+    inputs = [embedding_input(c.context, c.text) for c in chunks]
+    distinct = list(dict.fromkeys(inputs))
+    vectors = dict(zip(distinct, embedder.embed_documents(distinct), strict=True))
+    for chunk, text in zip(chunks, inputs, strict=True):
+        chunk.embedding = vectors[text]
+
+
+async def insert_chunks(
     conn: asyncpg.Connection, document_id: UUID, chunks: dict[str, list[Chunk]]
 ) -> int:
     records = [
-        (document_id, strategy, c.index, c.text, c.context, c.token_count, c.metadata)
+        (document_id, strategy, c.index, c.text, c.context, c.token_count, c.metadata, c.embedding)
         for strategy, strategy_chunks in chunks.items()
         for c in strategy_chunks
     ]
     await conn.executemany(
         """
         INSERT INTO chunks
-            (document_id, strategy, chunk_index, text, context, token_count, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+            (document_id, strategy, chunk_index, text, context, token_count, metadata, embedding)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         """,
         records,
     )

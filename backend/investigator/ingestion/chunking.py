@@ -18,6 +18,8 @@ from bisect import bisect_right
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 
+import numpy as np
+
 from investigator.ingestion.models import LoadedDocument
 from investigator.ingestion.tokenizer import Tokenizer
 
@@ -38,6 +40,7 @@ class Chunk:
     char_start: int
     char_end: int
     metadata: dict = field(default_factory=dict)
+    embedding: np.ndarray | None = None  # filled in by the ingestion step, before storing
 
 
 def chunk_fixed(

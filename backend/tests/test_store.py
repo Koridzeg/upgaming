@@ -3,12 +3,15 @@
 import asyncio
 
 import asyncpg
+import pytest
 
 from investigator.db import init_connection
+from investigator.embedding import DIMENSIONS, EmbeddingModelMismatch
 from investigator.ingestion.models import Block, LoadedDocument
 from investigator.ingestion.store import delete_document, ingest_document
 from investigator.ingestion.tokenizer import WhitespaceTokenizer
 from investigator.migrate import apply_migrations
+from tests.fakes import FakeEmbedder
 from tests.test_dedup import TEXT
 
 TOKENS = WhitespaceTokenizer()
@@ -161,6 +164,60 @@ def test_delete_removes_chunks_and_history(empty_db):
 
     assert (first, second) == (True, False)
     assert counts == {"chunks": 0, "versions": 0}
+
+
+def test_vectors_are_stored_and_identical_chunks_embedded_once(empty_db):
+    embedder = FakeEmbedder()
+
+    async def scenario():
+        conn = await connect(empty_db)
+        try:
+            # No heading, one short paragraph: the same single chunk under both strategies.
+            # (With a heading they differ: `fixed` keeps the heading line inside its text.)
+            note = LoadedDocument("Note", "txt", [Block("paragraph", "Pool max_size is 200.")])
+            await ingest_document(
+                conn,
+                note,
+                source_id="upload:note.txt",
+                source_type="upload",
+                strategies=["fixed", "structural"],
+                tokenizer=TOKENS,
+                embedder=embedder,
+            )
+            return await conn.fetchrow(
+                "SELECT count(*) AS chunks, count(embedding) AS embedded,"
+                " max(vector_dims(embedding)) AS dims FROM chunks"
+            )
+        finally:
+            await conn.close()
+
+    stats = asyncio.run(scenario())
+
+    assert dict(stats) == {"chunks": 2, "embedded": 2, "dims": DIMENSIONS}
+    assert [len(call) for call in embedder.calls] == [1]  # 2 chunks, 1 model call
+
+
+def test_vectors_from_a_different_model_are_refused(empty_db):
+    class OtherModel(FakeEmbedder):
+        name, sha256 = "other-model", "1" * 64
+
+    async def scenario():
+        conn = await connect(empty_db)
+        try:
+            await ingest_document(
+                conn, runbook("First."), source_id="upload:a.md", source_type="upload",
+                strategies=["structural"], tokenizer=TOKENS, embedder=FakeEmbedder(),
+            )  # fmt: skip
+            with pytest.raises(EmbeddingModelMismatch):
+                await ingest_document(
+                    conn, runbook("Second."), source_id="upload:b.md", source_type="upload",
+                    strategies=["structural"], tokenizer=TOKENS, embedder=OtherModel(),
+                )  # fmt: skip
+            return await conn.fetchval("SELECT count(*) FROM documents")
+        finally:
+            await conn.close()
+
+    assert asyncio.run(scenario()) == 1  # the refused write left nothing behind
 
 
 def test_keyword_search_also_matches_the_context_header(empty_db):

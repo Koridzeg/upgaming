@@ -9,6 +9,9 @@ services:
     ports:
       # Host port 5433 so this never collides with a locally installed Postgres on 5432
       - "5433:5432"
+    # Parallel index builds share memory between workers; Docker's 64 MB default is too small
+    # for an HNSW build over ~190k vectors.
+    shm_size: 1g
     volumes:
       - pgdata:/var/lib/postgresql/data
       # Scripts here run once, when the data volume is first created

@@ -12,6 +12,7 @@ import asyncpg
 
 from investigator.config import get_settings
 from investigator.db import init_connection
+from investigator.embedding import get_embedder
 from investigator.ingestion.loaders import load_document
 from investigator.ingestion.models import DocumentError
 from investigator.ingestion.store import ingest_document
@@ -25,6 +26,7 @@ async def ingest_files(paths: list[Path], strategies: list[str]) -> None:
     conn = await asyncpg.connect(url)
     await init_connection(conn)
     tokenizer = get_tokenizer()
+    embedder = get_embedder()
     try:
         for path in paths:
             try:
@@ -39,6 +41,7 @@ async def ingest_files(paths: list[Path], strategies: list[str]) -> None:
                 source_type="upload",
                 strategies=strategies,
                 tokenizer=tokenizer,
+                embedder=embedder,
             )
             detail = f"v{result.version}, {result.chunk_count} chunks" if result.version else ""
             if result.duplicate_of:

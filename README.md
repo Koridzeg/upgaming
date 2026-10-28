@@ -58,6 +58,20 @@ the same model (title, metadata, ordered blocks). To see what a file turns into:
 python -m investigator.ingestion.loaders path/to/file.pdf
 ```
 
+## Embeddings and bulk loading
+
+Chunks are embedded with `BAAI/bge-small-en-v1.5` (384 dimensions), quantized to int8 and run
+on ONNX Runtime. The quantized model is created once from the pinned upstream model:
+
+```bash
+python -m investigator.embedding                              # -> data/models/*.onnx
+python -m investigator.ingestion.bulk --strategies fixed,structural   # all 66,581 HotpotQA docs
+```
+
+The bulk loader skips documents that are already stored, so it can be re-run after an
+interruption. The database records which model produced its vectors and refuses vectors from
+any other model.
+
 ## Ingesting files
 
 ```bash
