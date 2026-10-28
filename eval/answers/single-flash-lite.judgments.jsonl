@@ -60,3 +60,7 @@
 {"id": "S18", "verdict": "correct", "reason": "The answer correctly states the alert ID, description, start time, and resolution time, matching the reference answer."}
 {"id": "S19", "verdict": "correct", "reason": "The answer correctly states that Marco Silva was the incident commander for INC-2026-0311 and does not contradict the reference."}
 {"id": "S20", "verdict": "partial", "reason": "It correctly states that the normal p99 latency is not documented, but it omits the reference’s mention of the p95 warning above 500 ms on 2026‑03‑05."}
+{"id": "5a7a51b95542990783324f0f", "verdict": "correct", "reason": "The answer correctly states that Liam Cunningham was born first, matching the reference."}
+{"id": "5a8b128455429971feec463b", "verdict": "incorrect", "reason": "The answer does not state Honolulu, the city given in the reference, and instead lists multiple beach locations, contradicting the reference."}
+{"id": "5abbdf8055429931dba145bb", "verdict": "incorrect", "reason": "The answer does not provide the required company (Prada) and incorrectly states that no evidence exists."}
+{"id": "5abbeb7d554299114383a09b", "verdict": "correct", "reason": "The answer correctly states that the Pulsed Pressure Cavitation Technique was developed at Oak Ridge National Laboratory, which is sponsored by the U.S. Department of Energy, matching the reference."}

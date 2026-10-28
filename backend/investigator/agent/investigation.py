@@ -31,6 +31,7 @@ from investigator.agent.evidence import (
 )
 from investigator.agent.prompts import (
     ANSWER_NOW,
+    CITE,
     FINAL_ANSWER,
     INVESTIGATOR_SYSTEM,
     NUDGE,
@@ -165,7 +166,7 @@ class Investigator:
     ) -> AsyncIterator[AgentEvent]:
         """The model searches in as many steps as it needs, then calls final_answer."""
         messages = [Message("system", INVESTIGATOR_SYSTEM), Message("user", question)]
-        must_answer, nudged, told_to_answer = False, False, False
+        must_answer, nudged, told_to_answer, asked_to_cite = False, False, False, False
         for turn in range(self.max_turns + GRACE_TURNS):
             # The last turn, or any turn after the context grew past budget, must answer.
             # All tools stay offered: Groq rejects (400) a call to a tool that isn't in the
@@ -195,7 +196,14 @@ class Investigator:
             for call in response.tool_calls:
                 if call.name == "final_answer" and call.arguments is not None:
                     outcome["final"] = call.arguments
-                    return
+                    if asked_to_cite or not _uncited(call.arguments, registry):
+                        return
+                    # An answer without citations can't be checked. Measured: 2 of 42
+                    # evaluation answers and one live one. Send it back once; if no better
+                    # answer follows, this one stands (it is already in outcome) with a warning.
+                    asked_to_cite = must_answer = told_to_answer = True
+                    messages.append(Message("tool", CITE, tool_call_id=call.id))
+                    continue
                 if answer_now and call.name != "final_answer":
                     text, events = "Error: the search limit is reached. Call final_answer.", []
                 else:
@@ -339,6 +347,15 @@ class Investigator:
         unsupported = [v for v in result.verification if v["verdict"] == "unsupported"]
         if unsupported:
             result.warnings.append(f"{len(unsupported)} claim(s) not supported by their citations")
+
+
+def _uncited(final: dict, registry: EvidenceRegistry) -> bool:
+    """An answer (not an abstention) that cites none of the evidence the model was shown."""
+    status = final.get("status")
+    if status in STATUSES and status != "answered":
+        return False
+    valid, _ = registry.check_citations(normalize_citations(str(final.get("answer", ""))))
+    return not valid
 
 
 def _summary(new, seen) -> dict:

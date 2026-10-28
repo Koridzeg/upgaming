@@ -5,7 +5,7 @@ import json
 import uuid
 
 from investigator.agent.investigation import Investigator
-from investigator.agent.prompts import ANSWER_NOW, NUDGE
+from investigator.agent.prompts import ANSWER_NOW, CITE, NUDGE
 from investigator.llm.errors import AllProvidersFailed, ProviderUnavailable
 from investigator.llm.types import LLMResponse, ToolCall, Usage
 from investigator.retrieval.search import SearchHit
@@ -235,6 +235,45 @@ def test_plain_text_answer_gets_one_nudge_for_the_structured_form():
     assert llm.calls[1]["messages"][-1].content == NUDGE
     assert llm.calls[1]["tool_choice"] == "required"
     assert result["status"] == "insufficient_evidence"
+
+
+def test_an_uncited_answer_goes_back_once_to_add_citations():
+    llm = ScriptedLLM(
+        reply(call("search", {"query": "Diamond Head"})),
+        reply(call("final_answer", {"answer": "Hield was the MVP.", "status": "answered"}, "f1")),
+        reply(call("final_answer", {"answer": "Hield was the MVP [E1].", "status": "answered"})),
+    )
+
+    _, result = run(llm, FakeRetriever({"Diamond Head": [MVP]}), verify=False)
+
+    feedback = llm.calls[2]["messages"][-1]
+    assert (feedback.role, feedback.content, feedback.tool_call_id) == ("tool", CITE, "f1")
+    assert llm.calls[2]["tool_choice"] == "required"
+    assert [c["id"] for c in result["citations"]] == ["E1"]
+    assert result["warnings"] == []
+
+
+def test_an_answer_still_uncited_after_one_reminder_stands_with_a_warning():
+    uncited = reply(call("final_answer", {"answer": "Hield was the MVP.", "status": "answered"}))
+    llm = ScriptedLLM(uncited, uncited)
+
+    _, result = run(llm, FakeRetriever({}), verify=False)
+
+    assert len(llm.calls) == 2  # one reminder, no loop
+    assert result["answer"] == "Hield was the MVP."
+    assert "the answer cites no evidence" in result["warnings"]
+
+
+def test_an_uncited_answer_is_kept_when_the_model_never_answers_again():
+    llm = ScriptedLLM(
+        reply(call("final_answer", {"answer": "Hield was the MVP.", "status": "answered"})),
+        reply(call("search", {"query": "Diamond Head"})),
+        reply(call("search", {"query": "Diamond Head"})),
+    )
+
+    _, result = run(llm, FakeRetriever({}), verify=False, max_turns=1)
+
+    assert result["answer"] == "Hield was the MVP."  # not "ran out of steps"
 
 
 def test_llm_outage_ends_in_a_failed_result_not_an_exception():

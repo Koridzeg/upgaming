@@ -46,6 +46,12 @@ NUDGE = (
     "status accordingly."
 )
 
+CITE = (
+    "Error: the answer cites no evidence. Call final_answer again with the same answer, "
+    "putting the ids of the evidence that supports each factual sentence after it, like [E1]. "
+    "If no evidence you were shown supports the answer, set status to insufficient_evidence."
+)
+
 VERIFIER_SYSTEM = """\
 You check an answer against its evidence. For each numbered claim you get the claim and the \
 text of the evidence it cites. Judge only from that text, not from general knowledge.
