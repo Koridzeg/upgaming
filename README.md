@@ -95,6 +95,18 @@ the ids are fixed in `eval/retrieval_sample.json`) plus the answerable synthetic
 Metrics: recall@K, all@K (every gold document found), MRR, nDCG@10, sentence recall@10,
 with paired-bootstrap confidence intervals. See [eval/retrieval_report.md](eval/retrieval_report.md).
 
+## LLM providers
+
+Groq and Gemini, through their OpenAI-compatible APIs, behind one client with retries
+(exponential backoff, or the provider's own `Retry-After`), fallback to the other provider, a
+circuit breaker, tool calling, streaming and token/latency counters. Set either key in `.env`
+(both free); with both, the second is the fallback.
+
+```bash
+python -m investigator.llm --models   # model ids your keys can use
+python -m investigator.llm            # live tool-call round trip + streaming per provider
+```
+
 ## Ingesting files
 
 ```bash

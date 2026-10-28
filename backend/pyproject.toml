@@ -17,6 +17,10 @@ dependencies = [
     "beautifulsoup4>=4.12",
     # Chunking: the embedding model's own tokenizer
     "tokenizers>=0.20",
+    # Embeddings
+    "onnxruntime>=1.20",
+    # LLM API calls (also what FastAPI's TestClient uses)
+    "httpx2>=2.16",
 ]
 
 [project.optional-dependencies]
@@ -24,10 +28,10 @@ dependencies = [
 data = [
     "pyarrow>=18",
     "fpdf2>=2.8",
+    "onnx>=1.17",  # only to produce the int8 model file (python -m investigator.embedding)
 ]
 dev = [
     "pytest>=8.3",
-    "httpx2>=2.16",  # required by FastAPI's TestClient (Starlette >= 1.x)
     "ruff>=0.8",
 ]
 
