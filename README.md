@@ -275,7 +275,7 @@ cancels a running investigation, so no tokens are spent on an answer nobody read
 ## Testing
 
 ```bash
-pytest                      # 163 tests, ~10 s; needs the database from `docker compose up`
+pytest                      # 164 tests, ~10 s; needs the database from `docker compose up`
 pytest --cov                # with coverage
 pytest tests/test_injection.py -v
 ```

@@ -36,7 +36,7 @@ assistant's scripts printed only whether a key was set and its length, never its
 | Area | Contribution |
 | --- | --- |
 | Code | Most of the Python backend (ingestion, retrieval, agent, LLM client, API, evaluation), the SQL migrations, the Angular UI, the Dockerfile and deployment scripts |
-| Tests | Most of the 163 tests, including the prompt-injection suite |
+| Tests | Most of the 164 tests, including the prompt-injection suite |
 | Design | Options with trade-offs at each step, for example int8 vs fp32 embeddings, two chunking strategies, rank fusion and the agent loop |
 | Experiments | Ran the retrieval and answer evaluations, measured memory, latency and free-tier limits, and read logs to diagnose failures |
 | Documentation | Drafts of the README, these reports and the build notes |
@@ -83,7 +83,7 @@ one.
 
 ## How correctness was checked
 
-- **Tests against real infrastructure:** 163 tests run against a real Postgres database. Only the
+- **Tests against real infrastructure:** 164 tests run against a real Postgres database. Only the
   embedder and the LLM are replaced, by a fake and a scripted model. That covers 93% of the code
   that runs in the app.
 - **Measurements over assumptions:** retrieval and answer quality are measured on fixed question
