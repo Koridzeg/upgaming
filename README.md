@@ -1,5 +1,7 @@
 # AI Investigation Engine
 
+English · [ქართული](README.ka.md)
+
 A multi-document investigation system: it searches a large document collection, connects
 facts across sources, and answers with citations, flagging contradictions and refusing to
 answer when the evidence is insufficient.
@@ -7,6 +9,70 @@ answer when the evidence is insufficient.
 **Live demo:** <https://investigation-engine-jpin.onrender.com/> (66,569 documents). It runs on
 free plans: the first visit after 15 idle minutes takes about a minute while the server wakes,
 and each LLM has a daily token budget (see [Deployment](#deployment)).
+
+**Reports:** [Evaluation Report](docs/evaluation-report.md) ·
+[AI Usage Report](docs/ai-usage-report.md)
+
+## How it works
+
+```
+                 ┌─ ingestion (CLI or upload API) ─────────────────────────────┐
+ PDF, DOCX,      │ load -> drop hidden text -> metadata -> dedupe (content     │
+ HTML, MD, TXT,  │ hash) -> chunk (structural | fixed) -> embed (bge-small     │
+ JSON, CSV  ───> │ int8, ONNX) -> store, all in one transaction per document   │
+                 └──────────────────────────────┬──────────────────────────────┘
+                                                v
+                         PostgreSQL + pgvector: documents, versions, chunks,
+                         halfvec HNSW index per strategy, BM25 term statistics
+                                                ^
+                 ┌─ investigation (UI or API) ──┴──────────────────────────────┐
+ question  ───>  │ LLM with tools: search / read_more / final_answer           │
+                 │   search = dense (HNSW) + BM25 -> weighted RRF -> re-rank   │
+                 │ -> answer with [E#] citations, contradictions, abstention   │
+                 │ -> citation checks -> verifier LLM checks each cited claim  │
+                 └─────────────────────────────────────────────────────────────┘
+```
+
+An investigation, step by step:
+
+1. The question goes to the LLM with three tools: `search(query, k)`, `read_more(evidence_id)`
+   (the passages around a result) and `final_answer`.
+2. Each `search` runs hybrid retrieval. The query is embedded for an HNSW vector search and
+   tokenized for BM25 over precomputed term statistics. The two rankings are fused with
+   weighted Reciprocal Rank Fusion, then re-ranked.
+3. Each passage becomes evidence `E1`, `E2`, ... in an escaped `<evidence>` block with its
+   title, section, page and document status. Passages that address an AI are flagged as
+   "do not follow".
+4. The model searches again using what it learned: the entity found by the first search
+   becomes the next query (multi-hop). After at most 5 turns it must answer.
+5. `final_answer` carries the answer with `[E#]` citations, a status (`answered`, `partial` or
+   `insufficient_evidence`), the contradictions it found (each side with its evidence) and
+   what is missing.
+6. Checks run on the result. Citations to evidence never shown are removed, and an answer
+   with no citations goes back once to add them. A separate verifier call then rates each cited
+   sentence against its evidence.
+7. Every step streams to the UI as a server-sent event, so the user watches the searches as
+   they happen.
+
+## Technical choices
+
+The evaluation numbers are on the HotpotQA test split (150 questions; the settings were tuned
+on 150 others). Brackets are paired-bootstrap 95% confidence intervals.
+
+| Decision | Choice | Why | Rejected alternative |
+| --- | --- | --- | --- |
+| Data | HotpotQA distractor validation set (66,581 unique paragraphs from 7,405 questions) plus a synthetic incident corpus (15 files, 6 formats) | Gold supporting paragraphs make Recall@K and MRR measurable without hand labelling; the synthetic corpus adds file formats, contradictions, gaps and a prompt injection | RAGBench, 2WikiMultihopQA: similar, but HotpotQA's labels are the simplest to evaluate; danluu post-mortems: no gold labels |
+| Database | PostgreSQL + pgvector | Documents, versions, chunks, vectors and BM25 statistics in one store; an update replaces text, chunks and vectors in one transaction; Neon has a free tier | Qdrant, Pinecone: documents and metadata would need a second store kept consistent with the first |
+| Chunking | Structural: whole paragraphs, list items and table rows packed into chunks of at most 128 tokens; headings start a new chunk | Sentence recall@10 +0.023 [+0.009, +0.041] over fixed windows at the same token cost | Fixed 128-token windows with 32 tokens of overlap: kept as the comparison |
+| Embeddings | `bge-small-en-v1.5` (384 dimensions), quantized to int8, run locally on ONNX Runtime | Free, no rate limits for bulk loading, reproducible. int8 is 34 MB instead of 133 MB and 1.7x faster (58 vs 34 texts/s), with the same quality: self-retrieval top-1 98.0% vs 97.7%. It fits a 512 MB free server | Embedding APIs: rate limits and cost for 66k documents, and every query would depend on another service |
+| Keyword search | BM25, written in SQL over a `term_stats` table | Postgres's `ts_rank` has no inverse document frequency, so a rare, telling term counts no more than a common one | `ts_rank`; Elasticsearch (another service to host) |
+| Ranking (own algorithm) | Weighted RRF of the dense and BM25 rankings, then a re-ranker (title-naming boost, MMR diversity) | RRF fuses ranks, so scores on different scales need no calibration. Hybrid beats dense only by +0.060 all@10 [0.000, +0.127] and BM25 only by +0.120 [+0.067, +0.180]. The tuned re-ranker adds only +0.007 over plain RRF, which is not significant, and tuning switched MMR off (λ = 1.0) | Averaging raw scores (cosine and BM25 are on different scales); only a library re-ranker (the brief asks for an own component) |
+| Agent | Own tool-calling loop: search, read_more, final_answer | None of the 38 gold documents the best single search misses is named in its question: they are bridge entities that only a second search, using what the first one found, can name. An own loop keeps every step visible and testable turn by turn with a scripted LLM | LangChain or LlamaIndex agents: hidden prompts and control flow, harder to test and explain |
+| LLMs | Groq and Gemini free tiers through their OpenAI-compatible APIs, one own client | Free; each model has its own budget, so a chain of models serves more users; one client gives retries, backoff, `Retry-After`, fallback and a circuit breaker | Paid APIs (the demo would spend credits); two provider SDKs for the same protocol |
+| API | FastAPI, async, server-sent events | The agent mostly waits on I/O; SSE is one-way plain HTTP, enough to stream the steps | WebSockets: two-way channel not needed |
+| Database driver | asyncpg, plain SQL | Search uses vector and full-text operators an ORM would hide; works on Windows' default event loop | SQLAlchemy; psycopg 3 (its async mode needs another event loop on Windows) |
+| UI | Angular 19 (standalone components, signals), built into the same image | One container, one deploy; the author's main frontend stack | Streamlit or Gradio: less control over the UI and a second process |
+| Hosting | Render free (Docker) plus Neon free (Postgres) | The app uses 140-220 MB, within Render's 512 MB; Neon keeps the data across restarts | Hugging Face Docker Spaces now need a paid plan; serverless platforms don't suit a 30-60 s streamed investigation with a model held in memory |
 
 ## Local development
 
@@ -209,7 +275,7 @@ cancels a running investigation, so no tokens are spent on an answer nobody read
 ## Testing
 
 ```bash
-pytest                      # 157 tests, ~10 s; needs the database from `docker compose up`
+pytest                      # 163 tests, ~10 s; needs the database from `docker compose up`
 pytest --cov                # with coverage
 pytest tests/test_injection.py -v
 ```
@@ -318,7 +384,8 @@ backend/
   migrations/       Numbered SQL migrations, applied in order on startup
   tests/
 frontend/           Angular UI (standalone components, signals)
-eval/               Evaluation question sets, raw results and reports
+docs/               Evaluation Report and AI Usage Report (English and Georgian, *.ka.md)
+eval/               Evaluation question sets, raw results and generated reports
 Dockerfile          The production image (UI build, embedding model, app)
 render.yaml         The live demo's service definition (Render Blueprint)
 docker/             Local Postgres init scripts

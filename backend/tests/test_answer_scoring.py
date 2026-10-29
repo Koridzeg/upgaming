@@ -3,7 +3,7 @@
 import json
 
 from investigator.evaluation import answers
-from investigator.evaluation.answers import AnswerQuestion, score_config
+from investigator.evaluation.answers import AnswerQuestion, compare, score_config
 
 QUESTIONS = [
     AnswerQuestion("Q1", "synthetic", "multi_doc", "q1", "ref", ["upload:a", "upload:b"]),
@@ -68,3 +68,18 @@ def test_unjudged_answers_are_left_out_not_counted_as_wrong(tmp_path, monkeypatc
     summary, _ = score_config("cfg", QUESTIONS)
 
     assert summary["questions"] == 1 and summary["score"] == 1.0
+
+
+def test_comparisons_leave_out_runs_that_failed_on_either_side():
+    def row(qid, score, status="answered"):
+        return {"id": qid, "score": score, "status": status}
+
+    # Q3 failed for "a" (e.g. quota spent): an outage, not a wrong answer, so it is not compared
+    a = [row("Q1", 0.5), row("Q2", 1.0), row("Q3", 0.0, status="failed")]
+    b = [row("Q1", 1.0), row("Q2", 1.0), row("Q3", 1.0)]
+
+    result = compare("a", a, "b", b)
+
+    assert result["questions"] == 2
+    assert (result["from_score"], result["to_score"]) == (0.75, 1.0)
+    assert result["difference"] == 0.25

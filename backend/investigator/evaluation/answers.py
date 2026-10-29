@@ -30,6 +30,7 @@ import argparse
 import asyncio
 import json
 import random
+import sys
 import time
 from collections import defaultdict
 from dataclasses import asdict, dataclass
@@ -59,6 +60,13 @@ CONFIGS = {
     "agent-20b": {"model": "groq:openai/gpt-oss-20b", "single_shot": False},
 }
 DEFAULT_JUDGE = "groq:openai/gpt-oss-20b"
+# (from, to) pairs for the paired bootstrap: baseline -> agent on one model, and model -> model
+COMPARISONS = [
+    ("single-flash-lite", "agent-flash-lite"),
+    ("agent-qwen", "agent-flash-lite"),
+    ("single-120b", "agent-120b"),
+    ("agent-20b", "agent-120b"),
+]
 VERDICT_SCORE = {"correct": 1.0, "partial": 0.5, "incorrect": 0.0, "failed": 0.0}
 
 JUDGE_SYSTEM = """\
@@ -326,29 +334,39 @@ def score_config(name: str, questions: list[AnswerQuestion]) -> tuple[dict, list
     return summary, rows
 
 
+def compare(name_a: str, rows_a: list[dict], name_b: str, rows_b: list[dict]) -> dict | None:
+    """Paired comparison of answer scores on the questions both configurations completed.
+
+    A failed run (the model was unavailable, e.g. its daily quota was spent) says nothing about
+    answer quality, so it is left out on both sides instead of being scored as wrong.
+    """
+    left = {r["id"]: r["score"] for r in rows_a if r["status"] != "failed"}
+    right = {r["id"]: r["score"] for r in rows_b if r["status"] != "failed"}
+    shared = sorted(left.keys() & right.keys())
+    if not shared:
+        return None
+    diff, low, high = paired_bootstrap([left[i] for i in shared], [right[i] for i in shared])
+    return {
+        "from": name_a,
+        "to": name_b,
+        "questions": len(shared),
+        "from_score": round(mean(left[i] for i in shared), 3),
+        "to_score": round(mean(right[i] for i in shared), 3),
+        "difference": round(diff, 3),
+        "ci95": [round(low, 3), round(high, 3)],
+    }
+
+
 def build_report(names: list[str], questions: list[AnswerQuestion]) -> dict:
     scored = {name: score_config(name, questions) for name in names}
     results = {"configs": {name: summary for name, (summary, _) in scored.items()}}
 
     comparisons = []
-    for a, b in (("single-120b", "agent-120b"), ("agent-20b", "agent-120b")):
+    for a, b in COMPARISONS:
         if a in scored and b in scored:
-            left = {r["id"]: r["score"] for r in scored[a][1]}
-            right = {r["id"]: r["score"] for r in scored[b][1]}
-            shared = sorted(left.keys() & right.keys())
-            if shared:
-                diff, low, high = paired_bootstrap(
-                    [left[i] for i in shared], [right[i] for i in shared]
-                )
-                comparisons.append(
-                    {
-                        "from": a,
-                        "to": b,
-                        "questions": len(shared),
-                        "difference": round(diff, 3),
-                        "ci95": [round(low, 3), round(high, 3)],
-                    }
-                )
+            comparison = compare(a, scored[a][1], b, scored[b][1])
+            if comparison:
+                comparisons.append(comparison)
     results["comparisons"] = comparisons
     results["not_correct"] = {
         name: [r for r in rows if r["verdict"] != "correct"] for name, (_, rows) in scored.items()
@@ -400,10 +418,12 @@ def render(results: dict) -> str:
         [[g, *(configs[n]["score_by_group"].get(g) for n in names)] for g in groups],
     )
     lines += ["", "## Paired bootstrap on the answer score, 95% CI", ""]
+    lines += ["Only questions both configurations completed (failed runs are left out).", ""]
     lines += markdown_table(
-        ["From", "To", "Questions", "Difference", "95% CI"],
-        [[c["from"], c["to"], c["questions"], f"{c['difference']:+.3f}",
-          f"[{c['ci95'][0]:+.3f}, {c['ci95'][1]:+.3f}]"] for c in results["comparisons"]],
+        ["From", "To", "Questions", "From score", "To score", "Difference", "95% CI"],
+        [[c["from"], c["to"], c["questions"], c["from_score"], c["to_score"],
+          f"{c['difference']:+.3f}", f"[{c['ci95'][0]:+.3f}, {c['ci95'][1]:+.3f}]"]
+         for c in results["comparisons"]],
     )  # fmt: skip
     for name, rows_ in results["not_correct"].items():
         lines += ["", f"## Not fully correct: {name}", ""]
@@ -440,6 +460,7 @@ def main() -> None:
             return
         asyncio.run(judge_all(names, questions, args.judge))
     results = build_report(names, questions)
+    sys.stdout.reconfigure(errors="replace")  # answers contain characters a Windows console lacks
     print(render(results))
     print(f"total {time.perf_counter() - started:.0f}s")
 
